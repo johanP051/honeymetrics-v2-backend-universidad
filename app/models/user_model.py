@@ -1,5 +1,6 @@
 from app.db.base import Base
 from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, DateTime
+from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
 class User(Base):
@@ -23,3 +24,5 @@ class User(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    role = relationship("Role", back_populates="users") # Esto permite user.role,  backpopulates permite la relacion bidireccional de Users.role <---> Role.users
