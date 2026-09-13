@@ -5,31 +5,45 @@ from app.db.base import Base
 from app.models import Role, User
 from app.core.security import hash_password
 from app.services.auth_service import authenticate_user
+import pytest
 
-def test_correct_auth():
-    engine = create_engine("sqlite:///:memory:") #Conexion a sqlite
-    Base.metadata.create_all(engine) #Crea las tablas en la base temporal
+@pytest.fixture
+def db():
+    # Arrange en fixtures
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
 
-    with Session(engine) as db:
-        role = Role(name="admin", description="Administrador")
+    with Session(engine) as session:
+        yield session
 
-        user = User(
-            email="correo@prueba.com",
-            first_names="Usuario",
-            last_names="Prueba",
-            hashed_password=hash_password("Testing"),
-            role=role,
-        )
 
-        db.add(user)
-        db.commit()
+@pytest.fixture
+def active_user(db):
+    # Arrange en fixtures
+    role = Role(name="admin", description="Administrador")
 
-        authenticated_user = authenticate_user(
-            db,
-            "correo@prueba.com",
-            "Testing"
-        )
+    user = User(
+        email="correo@prueba.com",
+        first_names="Usuario",
+        last_names="Prueba",
+        hashed_password=hash_password("Testing"),
+        role=role,
+    )
 
-        assert authenticated_user is not None
-        assert authenticated_user.email == "correo@prueba.com"
+    db.add(user)
+    db.commit()
+    db.refresh(user)
 
+    return user
+
+def test_correct_auth(db, active_user):
+    # Act: llamada al servicio
+    authenticated_user = authenticate_user(
+        db,
+        "correo@prueba.com",
+        "Testing"
+    )
+
+    assert authenticated_user is not None
+    assert authenticated_user.id == active_user.id
+    assert authenticated_user.email == "correo@prueba.com"
