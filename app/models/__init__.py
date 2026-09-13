@@ -1,2 +1,4 @@
-# Modelos del dominio HoneyMetrics v2 (SQLAlchemy 2.0)
-# Se desarrollarán e integrarán progresivamente durante los Sprints.
+from app.models.role_model import Role
+from app.models.user_model import User
+
+__all__ = ["Role", "User"]
