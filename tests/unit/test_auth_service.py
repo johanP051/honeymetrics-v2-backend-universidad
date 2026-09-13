@@ -47,3 +47,36 @@ def test_correct_auth(db, active_user):
     assert authenticated_user is not None
     assert authenticated_user.id == active_user.id
     assert authenticated_user.email == "correo@prueba.com"
+
+
+def test_rejects_incorrect_password(db, active_user):
+    authenticated_user = authenticate_user(
+        db,
+        "correo@prueba.com",
+        "Incorrecta123",
+    )
+
+    assert authenticated_user is None
+
+
+def test_rejects_unknown_email(db, active_user):
+    authenticated_user = authenticate_user(
+        db,
+        "inexistente@prueba.com",
+        "Testing",
+    )
+
+    assert authenticated_user is None
+
+
+def test_rejects_inactive_user(db, active_user):
+    active_user.is_active = False
+    db.commit()
+
+    authenticated_user = authenticate_user(
+        db,
+        "correo@prueba.com",
+        "Testing",
+    )
+
+    assert authenticated_user is None
