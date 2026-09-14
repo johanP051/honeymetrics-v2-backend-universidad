@@ -1,4 +1,3 @@
-from app.schemas.health import HealthResponseDto
-from app.schemas.auth import LoginRequestDto, TokenResponseDto, UserResponseDto
+from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 
-__all__ = ["HealthResponseDto", "LoginRequestDto", "TokenResponseDto", "UserResponseDto"]
+__all__ = ["LoginRequest", "TokenResponse", "UserResponse"]
