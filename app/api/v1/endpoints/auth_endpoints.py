@@ -25,7 +25,15 @@ router = APIRouter(
 # Entrada: credentials es un LoginRequest (del cliente)
 # Inyeccion, db es una Session de get_db()
 # Salida: la funcion devuelve un TokenResponse al cliente
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+        "/login",
+        response_model=TokenResponse,
+        responses={
+            status.HTTP_401_UNAUTHORIZED: {
+                "description": "Credenciales inválidas"
+            }
+        }
+)
 def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = authenticate_user(
         db,
