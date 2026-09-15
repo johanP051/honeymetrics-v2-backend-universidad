@@ -1,0 +1,271 @@
+// ============================================================
+// MER — HONEYMETRICS v2.0 (PostgreSQL / Code-First SQLAlchemy)
+// Plataforma CTI (Cyber Threat Intelligence) & Monitoreo Honeypots
+// ============================================================
+
+// ------------------------------------------------------------
+// MÓDULO 1: SEGURIDAD, AUTENTICACIÓN Y CONTROL DE ACCESO (RBAC)
+// (users es el "hub" central de identidad en el sistema)
+// ------------------------------------------------------------
+
+Table roles {
+  id int [pk, increment, note: 'Identificador único del rol']
+  name varchar(50) [unique, not null, note: 'Nombre del rol: Administrador, Consultor, Analista, Directivo T.I.']
+  description varchar(255) [note: 'Descripción del alcance operativo']
+  created_at timestamp [not null, default: `now()`]
+
+  Note: 'Catálogo de roles para el control de acceso RBAC'
+}
+
+Table permissions {
+  id int [pk, increment, note: 'Identificador único del permiso granular']
+  code varchar(100) [unique, not null, note: 'Código técnico: users:create, threats:delete, logs:export']
+  name varchar(150) [not null, note: 'Nombre descriptivo del permiso']
+  module varchar(50) [not null, note: 'Módulo: AUTH, THREATS, LOGS, METRICS, SETTINGS']
+
+  Note: 'Permisos atómicos del sistema'
+}
+
+Table role_permissions {
+  id int [pk, increment]
+  role_id int [not null]
+  permission_id int [not null]
+
+  indexes {
+    (role_id, permission_id) [unique]
+  }
+
+  Note: 'Tabla pivote: Asignación de permisos granulares a roles (M:N)'
+}
+
+Table users {
+  id int [pk, increment, note: 'Identificador único del usuario']
+  email varchar(255) [unique, not null, note: 'Correo institucional @ucundinamarca.edu.co']
+  full_name varchar(255) [not null, note: 'Nombre y apellido del analista/directivo']
+  hashed_password varchar(255) [not null, note: 'Hash seguro Bcrypt']
+  role_id int [not null, note: 'FK al rol RBAC principal']
+  is_active boolean [not null, default: true, note: 'Estado de la cuenta (activo/inactivo)']
+  must_change_password boolean [not null, default: true, note: 'Fuerza actualización en primer inicio']
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  Note: 'Tabla principal de credenciales e identidad'
+}
+
+Table user_profiles {
+  id int [pk, increment]
+  user_id int [unique, not null, note: 'Relación 1:1 con users']
+  avatar_url varchar(255) [note: 'Ruta o URL de foto de perfil']
+  theme_preference varchar(20) [not null, default: 'dark', note: 'Preferencia de interfaz: dark | light']
+  timezone varchar(50) [not null, default: 'America/Bogota', note: 'Zona horaria para reportes']
+  is_mfa_enabled boolean [not null, default: false, note: 'Indica si tiene 2FA activo']
+  totp_secret varchar(255) [note: 'Semilla TOTP (cifrada en reposo)']
+  telegram_chat_id varchar(50) [note: 'Chat ID de Telegram para alertas y aprobaciones']
+  reset_token varchar(255) [note: 'Token firmado de un solo uso para recuperación']
+  reset_token_expires timestamp [note: 'Expiración del token de recuperación']
+
+  Note: 'Perfil extendido, seguridad 2FA/TOTP y preferencias'
+}
+
+// ------------------------------------------------------------
+// MÓDULO 2: THREAT INTELLIGENCE CENTER & LISTA NEGRA (CTI)
+// (threat_ips es el "hub" central de inteligencia y mitigación)
+// ------------------------------------------------------------
+
+Table threat_ips {
+  id int [pk, increment, note: 'Identificador único del indicador de compromiso (IoC)']
+  ip varchar(45) [unique, not null, note: 'Dirección IPv4 o IPv6 del atacante']
+  type varchar(20) [not null, default: 'IPv4', note: 'Protocolo de red: IPv4 | IPv6']
+  country varchar(100) [not null, default: 'Unknown', note: 'País de procedencia (Geolocalización)']
+  threat_score int [not null, note: 'Puntaje de riesgo calculado (0 a 100)']
+  category varchar(50) [not null, note: 'Clasificación: APT, Botnet, BruteForce, Scanner']
+  status varchar(30) [not null, default: 'Active', note: 'Estado: Active, Monitored, Whitelisted']
+  notes text [note: 'Observaciones técnicas o contexto forense']
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    ip [unique]
+    threat_score
+    category
+  }
+
+  Note: 'Catálogo de IoCs detectados por honeypots o agregaciones Wazuh'
+}
+
+Table blacklist_records {
+  id int [pk, increment, note: 'Identificador único del bloqueo']
+  threat_ip_id int [not null, note: 'FK a la IP en threat_ips']
+  blocked_by_user_id int [not null, note: 'FK al usuario que ejecutó o autorizó el bloqueo']
+  reason varchar(255) [not null, note: 'Motivo operativo de incorporación a lista negra']
+  attack_type varchar(100) [not null, note: 'Tipo de ataque detectado (ej. Fuerza Bruta SSH, SQLi)']
+  source_sensor varchar(100) [not null, default: 'Honeypot Cowrie', note: 'Sensor origen: Cowrie, Dionaea, Suricata']
+  is_active boolean [not null, default: true, note: 'Vigencia de la regla de bloqueo']
+  expires_at timestamp [note: 'Fecha de caducidad automática del bloqueo']
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    threat_ip_id
+    blocked_by_user_id
+  }
+
+  Note: 'Historial activo de IPs en lista negra y mitigación perimetral'
+}
+
+Table blacklist_audit_vault {
+  id int [pk, increment, note: 'ID inmutable de auditoría']
+  deleted_by_user_id int [note: 'FK al usuario que eliminó el registro de lista negra']
+  original_ip varchar(45) [not null, note: 'IP que fue desbloqueada o purgada']
+  full_record_json jsonb [not null, note: 'Copia serializada inmutable (Non-Repudiation) de la fila eliminada']
+  deleted_at timestamp [not null, default: `now()`]
+
+  Note: 'Bóveda forense inmutable (Append-Only) activada por trigger/evento al borrar de blacklist'
+}
+
+Table user_saved_filters {
+  id int [pk, increment]
+  user_id int [not null, note: 'FK al analista propietario del filtro']
+  name varchar(100) [not null, note: 'Nombre del preset: "Top APTs Rusia", "Puntaje > 80"']
+  filter_payload jsonb [not null, note: 'Criterios de búsqueda y ordenamiento guardados']
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    (user_id, name) [unique]
+  }
+
+  Note: 'Filtros recurrentes guardados por analistas para preparar datasets'
+}
+
+// ------------------------------------------------------------
+// MÓDULO 3: DESCARGAS DE LOGS, APROBACIONES & TELEGRAM
+// (log_exports gestiona la extracción asíncrona de telemetría)
+// ------------------------------------------------------------
+
+Table log_exports {
+  id varchar(36) [pk, note: 'UUID v4 único de la solicitud de exportación']
+  user_id int [not null, note: 'FK al analista solicitante']
+  start_date date [not null, note: 'Fecha inicial del rango de telemetría']
+  end_date date [not null, note: 'Fecha final del rango de telemetría']
+  date_range varchar(60) [not null, note: 'Etiqueta legible del rango']
+  count int [not null, default: 0, note: 'Cantidad estimada o final de registros a exportar']
+  file_format varchar(20) [not null, default: 'JSONL', note: 'Formato: JSONL | CSV']
+  status varchar(40) [not null, default: 'Pendiente', note: 'Pendiente, Procesando, Listo, Rechazada, Fallida, Expirado']
+  file_path varchar(255) [note: 'Ruta física del archivo comprimido generado']
+  file_size_bytes bigint [note: 'Tamaño del archivo generado en disco']
+  is_massive boolean [not null, default: false, note: 'Flag: true si supera 50.000 registros y requiere aprobación']
+  approved_by_user_id int [note: 'FK al administrador que aprobó (si aplica)']
+  approval_channel varchar(30) [note: 'Canal de aprobación: Telegram Bot | Web Console']
+  telegram_message_id varchar(50) [note: 'ID del mensaje interactivo enviado al bot de Telegram']
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+  expires_at timestamp [not null, note: 'Fecha límite de descarga (7 días por defecto)']
+
+  indexes {
+    user_id
+    status
+    expires_at
+  }
+
+  Note: 'Registro de solicitudes de extracción de logs con aprobación HITL vía Telegram'
+}
+
+// ------------------------------------------------------------
+// MÓDULO 4: TELEMETRÍA, ALERTAS Y MODELOS DE MACHINE LEARNING
+// (Persistencia de anomalías, trazabilidad HITL y modelos)
+// ------------------------------------------------------------
+
+Table security_alerts {
+  id bigint [pk, increment, note: 'ID de la alerta de anomalía']
+  threat_ip_id int [note: 'FK a la IP causante (si está identificada)']
+  severity varchar(20) [not null, note: 'Severidad: Baja, Media, Alta, Crítica']
+  alert_type varchar(100) [not null, note: 'Spike de Ataques, APT Detection, FIM Integrity Change']
+  description text [not null, note: 'Detalle técnico de la anomalía observada']
+  is_false_positive boolean [not null, default: false, note: 'Validación HITL: marcado como falso positivo']
+  reviewed_by_user_id int [note: 'FK al consultor que auditó la alerta']
+  reviewed_at timestamp [note: 'Fecha de validación humana']
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    severity
+    is_false_positive
+    created_at
+  }
+
+  Note: 'Alertas generadas por picos de tráfico o desviaciones del baseline'
+}
+
+Table ml_model_registry {
+  id int [pk, increment]
+  model_name varchar(100) [not null, note: 'Nombre del modelo: LightGBM-ThreatClassifier']
+  version varchar(30) [not null, note: 'Versión semántica: v1.0.0, v2.1.0']
+  algorithm varchar(50) [not null, note: 'LightGBM, Random Forest, Isolation Forest']
+  accuracy numeric(5,4) [note: 'Métrica de exactitud']
+  precision numeric(5,4) [note: 'Métrica de precisión']
+  recall numeric(5,4) [note: 'Métrica de exhaustividad']
+  f1_score numeric(5,4) [note: 'F1-Score ponderado']
+  roc_auc numeric(5,4) [note: 'Área bajo la curva ROC']
+  model_artifact_path varchar(255) [not null, note: 'Ruta del archivo binario .joblib']
+  is_active boolean [not null, default: false, note: 'Modelo actualmente en producción']
+  trained_by_user_id int [not null, note: 'FK al analista de datos que entrenó el modelo']
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    (model_name, version) [unique]
+    is_active
+  }
+
+  Note: 'Registro de versiones de modelos de Machine Learning y métricas de desempeño'
+}
+
+// ============================================================
+// RELACIONES (FOREIGN KEYS)
+// ============================================================
+
+// Módulo 1: Seguridad, Autenticación y RBAC
+Ref: users.role_id > roles.id [delete: restrict, update: cascade]
+Ref: user_profiles.user_id - users.id [delete: cascade, update: cascade]
+Ref: role_permissions.role_id > roles.id [delete: cascade, update: cascade]
+Ref: role_permissions.permission_id > permissions.id [delete: cascade, update: cascade]
+
+// Módulo 2: Threat Intelligence Center & Lista Negra
+Ref: blacklist_records.threat_ip_id > threat_ips.id [delete: cascade, update: cascade]
+Ref: blacklist_records.blocked_by_user_id > users.id [delete: restrict, update: cascade]
+Ref: blacklist_audit_vault.deleted_by_user_id > users.id [delete: set null, update: cascade]
+Ref: user_saved_filters.user_id > users.id [delete: cascade, update: cascade]
+
+// Módulo 3: Descargas de Logs y Aprobaciones
+Ref: log_exports.user_id > users.id [delete: restrict, update: cascade]
+Ref: log_exports.approved_by_user_id > users.id [delete: set null, update: cascade]
+
+// Módulo 4: Alertas y Machine Learning
+Ref: security_alerts.threat_ip_id > threat_ips.id [delete: set null, update: cascade]
+Ref: security_alerts.reviewed_by_user_id > users.id [delete: set null, update: cascade]
+Ref: ml_model_registry.trained_by_user_id > users.id [delete: restrict, update: cascade]
+
+// ============================================================
+// TABLE GROUPS — Agrupación visual en dbdiagram.io
+// ============================================================
+
+TableGroup "1. Seguridad & RBAC" [color: #8E44AD] {
+  roles
+  permissions
+  role_permissions
+  users
+  user_profiles
+}
+
+TableGroup "2. Threat Intel & Lista Negra" [color: #E74C3C] {
+  threat_ips
+  blacklist_records
+  blacklist_audit_vault
+  user_saved_filters
+}
+
+TableGroup "3. Descargas & Aprobaciones (Telegram)" [color: #2E86AB] {
+  log_exports
+}
+
+TableGroup "4. Alertas & Machine Learning" [color: #27AE60] {
+  security_alerts
+  ml_model_registry
+}
