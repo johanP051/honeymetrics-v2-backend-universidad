@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: hm_v2_db
+    restart: "no"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_password}
+      POSTGRES_DB: ${POSTGRES_DB:-honeymetrics_v2}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hm_v2_network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hm_v2_api
+    restart: "no"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hm_v2_network
+
+networks:
+  hm_v2_network:
+    name: hm_v2_network
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: hm_v2_postgres_data
