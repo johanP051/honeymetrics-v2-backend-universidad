@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # Cloudflare Zero Trust (Opcional)
     CLOUDFLARE_TUNNEL_TOKEN: str = ""
 
+    # Telegram Bot & Webhooks (Human-in-the-loop para aprobaciones)
+    TELEGRAM_BOT_TOKEN: str = ""
+    ADMIN_TELEGRAM_CHAT_ID: str = ""
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
