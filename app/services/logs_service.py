@@ -1,7 +1,7 @@
 import logging
 import os
 import random
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Generator, List, Optional
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
@@ -13,6 +13,7 @@ from app.schemas.log_export_schema import (
     LogReportStatsResponse,
 )
 from app.services.telegram_service import TelegramService
+from app.services.retention_service import RetentionService
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,14 @@ logger = logging.getLogger(__name__)
 class LogsService:
     """
     Service Layer Pattern: Gestión de solicitudes de extracción de logs crudos,
-    persistencia en Base de Datos y streaming de datasets reales para Ciencia de Datos.
+    persistencia en Base de Datos, almacenamiento particionado en dos capas
+    y streaming de datasets reales para Ciencia de Datos y Auditoría CTI.
     """
 
-    # Fuentes de datasets reales de Wazuh extraídos en el ecosistema HoneyMetrics
+    # Directorio primario donde residen los archivos particionados locales
+    LOCAL_STORAGE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/downloads"))
+
+    # Fuentes candidatas de datasets históricos consolidados en el host
     DATASET_CANDIDATE_PATHS = [
         "/media/sebas/Exdrive/Workspace/HoneyMetrics/core/media/downloads/recent_months/logs_2026.08.jsonl",
         "/media/sebas/Exdrive/Workspace/HoneyMetrics/core/media/downloads/recent_months/logs_2026.07.jsonl",
@@ -120,6 +125,10 @@ class LogsService:
         export_id = f"EXP-{random.randint(1000, 9999)}"
         date_range = f"{start_date} / {end_date}"
 
+        # Saneamiento de retención en background para evitar saturación de disco
+        if background_tasks:
+            background_tasks.add_task(RetentionService.cleanup_old_logs, cls.LOCAL_STORAGE_DIR, 30)
+
         # Regla de negocio: > 7 días se considera extracción masiva (>50,000 logs)
         if diff_days > 7:
             count = 50000 + (diff_days - 7) * 8000
@@ -142,7 +151,7 @@ class LogsService:
                 db.add(export_record)
                 db.commit()
 
-            # Notificación a Telegram (Fail-safe: si falla, no revienta el registro)
+            # Notificación a Telegram (Fail-safe: si falla la red, no aborta la transacción)
             try:
                 sent = await TelegramService.send_approval_request(
                     export_id=export_id,
@@ -181,7 +190,7 @@ class LogsService:
                 db.add(export_record)
                 db.commit()
 
-                # Tarea asíncrona simulada en BackgroundTasks
+                # Simulación de tarea asíncrona de extracción y consolidación
                 if background_tasks:
                     def simulate_processing():
                         import time
@@ -218,7 +227,7 @@ class LogsService:
 
     @classmethod
     def update_export_status(cls, export_id: str, new_status: str, db: Session) -> bool:
-        """Actualiza el estado de una exportación (usado por el webhook de Telegram)."""
+        """Actualiza el estado de una exportación (usado por el webhook de Telegram o worker)."""
         record = db.query(LogExport).filter(LogExport.id == export_id).first()
         if record:
             record.status = new_status
@@ -253,11 +262,33 @@ class LogsService:
         )
 
     @classmethod
+    def get_partitioned_files_for_range(cls, start_date: date, end_date: date) -> List[str]:
+        """
+        Busca en el almacenamiento local los archivos particionados por día
+        que caigan dentro del rango [start_date, end_date].
+        """
+        matched_files = []
+        if not os.path.exists(cls.LOCAL_STORAGE_DIR):
+            return matched_files
+
+        current = start_date
+        while current <= end_date:
+            filename = f"logs_{current}.jsonl"
+            full_path = os.path.join(cls.LOCAL_STORAGE_DIR, filename)
+            if os.path.exists(full_path):
+                matched_files.append(full_path)
+            current += timedelta(days=1)
+
+        return matched_files
+
+    @classmethod
     def stream_jsonl_dataset(cls, export_id: str, db: Session) -> Generator[bytes, None, None]:
         """
         Generador de streaming HTTP de alto rendimiento para datasets masivos de logs JSONL.
-        Lee los eventos crudos reales de Wazuh desde los datasets del almacenamiento
-        y los transmite en bloques (chunks) sin saturar la memoria RAM del servidor.
+        Estrategia de dos niveles:
+        1. Si existen archivos particionados diarios para el rango, transmite sus chunks ordenados.
+        2. Si no, busca en los datasets consolidados históricos en el host.
+        3. Si no hay archivos, emite un payload sintético estructurado para pruebas en desarrollo.
         """
         record = cls.get_export_record(export_id, db)
         if not record or record.status != "Listo":
@@ -266,16 +297,18 @@ class LogsService:
         target_count = record.count
         yielded_count = 0
 
-        # Buscar el archivo de dataset real existente con mayor volumen
-        existing_sources = [p for p in cls.DATASET_CANDIDATE_PATHS if os.path.exists(p)]
+        # Nivel 1: Buscar archivos particionados diarios en data/downloads
+        partitioned_files = cls.get_partitioned_files_for_range(record.start_date, record.end_date)
+        source_files = partitioned_files if partitioned_files else [p for p in cls.DATASET_CANDIDATE_PATHS if os.path.exists(p)]
 
-        if not existing_sources:
-            # Fallback a generación sintética estandarizada si los archivos no están presentes en el host
-            yield f'{{"event": "honeymetrics_log", "export_id": "{export_id}", "notice": "Dataset sintetico de desarrollo"}}\n'.encode("utf-8")
+        if not source_files:
+            # Nivel 3: Fallback sintético defensivo
+            yield f'{{"event": "honeymetrics_log", "export_id": "{export_id}", "range": "{record.date_range}", "notice": "Dataset sintetico de desarrollo"}}\n'.encode("utf-8")
             return
 
+        # Nivel 1 y 2: Streaming en bloques sin saturar memoria RAM
         while yielded_count < target_count:
-            for source_path in existing_sources:
+            for source_path in source_files:
                 if yielded_count >= target_count:
                     break
 
@@ -291,7 +324,8 @@ class LogsService:
 
                             if yielded_count >= target_count:
                                 break
-                except Exception:
+                except Exception as e:
+                    logger.warning("Error al leer archivo de logs %s: %s", source_path, str(e))
                     continue
 
             break
