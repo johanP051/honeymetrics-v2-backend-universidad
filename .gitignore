@@ -30,6 +30,9 @@ htmlcov/
 # Logs & Temporary Data
 *.log
 logs/
+data/downloads/*.jsonl
+!data/downloads/.gitkeep
+
 
 # Databases
 *.db

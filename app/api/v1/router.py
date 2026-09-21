@@ -2,10 +2,12 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints.auth_endpoints import router as auth_router
+from app.api.v1.endpoints.logs_endpoints import router as logs_router
 
 api_router = APIRouter()
 
 api_router.include_router(auth_router)
+api_router.include_router(logs_router)
 
 # main.py ya agrega el prefijo /api/v1 en: app.include_router(api_router, prefix=settings.API_V1_STR)
 

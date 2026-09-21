@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     # Cloudflare Zero Trust (Opcional)
     CLOUDFLARE_TUNNEL_TOKEN: str = ""
 
+    # Telegram Bot & Webhooks (Human-in-the-loop para aprobaciones)
+    TELEGRAM_BOT_TOKEN: str = ""
+    ADMIN_TELEGRAM_CHAT_ID: str = ""
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+
+    # Wazuh Indexer (OpenSearch SIEM)
+    WAZUH_INDEXER_URL: str = "https://192.168.32.11:9200"
+    WAZUH_INDEXER_USER: str = "admin"
+    WAZUH_INDEXER_PASSWORD: str = ""
+    WAZUH_TLS_VERIFY: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
