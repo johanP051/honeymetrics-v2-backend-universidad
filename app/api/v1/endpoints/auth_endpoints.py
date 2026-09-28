@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.security import create_access_token # importa la funcion que genera el JWT
 from app.db.session import get_db # proporciona la sesion de la BD
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 from app.services.auth_service import authenticate_user
 
 # APIRouter es la herramienta que me permite agrupar rutas de FastAPI
@@ -49,7 +49,11 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> TokenResp
 
     token = create_access_token(str(user.id))
 
-    return TokenResponse(access_token=token)
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
 
 # Cliente (React, Swagger, etc.)
 #     |

@@ -55,3 +55,22 @@ def test_user_response_excludes_sensitive_password_hash():
 
     assert user_response.email == "correo@prueba.com"
     assert "hashed_password" not in user_response.model_dump()
+
+
+def test_token_response_accepts_user_response():
+    user_response = UserResponse(
+        id=1,
+        email="correo@prueba.com",
+        first_names="Usuario",
+        last_names="Prueba",
+        role_id=1,
+        is_active=True,
+        must_change_password=False,
+    )
+    token_response = TokenResponse(
+        access_token="signed-token",
+        user=user_response,
+    )
+
+    assert token_response.user is not None
+    assert token_response.user.email == "correo@prueba.com"
