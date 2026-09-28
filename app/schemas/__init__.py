@@ -5,6 +5,12 @@ from app.schemas.log_export_schema import (
     LogExportItemResponse,
     LogReportStatsResponse,
 )
+from app.schemas.threat_schema import (
+    AttackerIPSchema,
+    BotnetSubnetSchema,
+    ThreatSummarySchema,
+    HealthResponseSchema,
+)
 
 __all__ = [
     "LoginRequest",
@@ -14,5 +20,10 @@ __all__ = [
     "LogExportResponse",
     "LogExportItemResponse",
     "LogReportStatsResponse",
+    "AttackerIPSchema",
+    "BotnetSubnetSchema",
+    "ThreatSummarySchema",
+    "HealthResponseSchema",
 ]
+
 
