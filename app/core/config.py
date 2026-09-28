@@ -51,8 +51,6 @@ class Settings(BaseSettings):
     WAZUH_INDEXER_PASSWORD: str = ""
     WAZUH_TLS_VERIFY: bool = False
 
-
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
