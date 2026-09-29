@@ -91,6 +91,11 @@ def test_login_with_valid_credentials(client, active_user):
     assert "access_token" in data
     assert data["token_type"] == "bearer"
     assert data["access_token"]
+    assert "user" in data
+    assert data["user"] is not None
+    assert data["user"]["email"] == active_user.email
+    assert data["user"]["id"] == active_user.id
+    assert data["user"]["first_names"] == active_user.first_names
 
 def test_login_with_invalid_email(client, active_user):
     response = client.post(
