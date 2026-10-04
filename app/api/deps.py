@@ -71,7 +71,9 @@ def require_admin_user(
     con rol "Administrador". Lanza HTTP 403 si el rol no coincide.
     """
     role = db.query(Role).filter(Role.id == current_user.role_id).first()
-    if not role or role.name != "Administrador":
+    # Acepta 'admin' (seed scripts) y 'Administrador' (panel) sin distinción
+    # de mayúsculas: ambos identifican el rol administrador del sistema.
+    if not role or role.name.strip().lower() not in ("admin", "administrador"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acceso restringido: Se requieren privilegios de Administrador.",
