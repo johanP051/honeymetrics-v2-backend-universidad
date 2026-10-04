@@ -30,3 +30,20 @@ def create_access_token(subject: str) -> str:
 
     return encoded_jwt
 
+
+def decode_access_token(token: str) -> dict | None:
+    """
+    Decodifica y valida un JWT. Retorna el payload si es válido,
+    o None si el token es inválido, expirado o malformado.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None

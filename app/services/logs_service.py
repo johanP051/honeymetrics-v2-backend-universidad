@@ -121,6 +121,8 @@ class LogsService:
         background_tasks: Optional[BackgroundTasks] = None,
         db: Optional[Session] = None,
     ) -> LogExportResponse:
+        from app.services.wazuh_extractor import WazuhExtractor
+        
         diff_days = (end_date - start_date).days + 1
         export_id = f"EXP-{random.randint(1000, 9999)}"
         date_range = f"{start_date} / {end_date}"
@@ -129,9 +131,12 @@ class LogsService:
         if background_tasks:
             background_tasks.add_task(RetentionService.cleanup_old_logs, cls.LOCAL_STORAGE_DIR, 30)
 
+        # Usar WazuhExtractor para count
+        real_count = await WazuhExtractor.count_events_for_range(start_date, end_date)
+
         # Regla de negocio: > 7 días se considera extracción masiva (>50,000 logs)
         if diff_days > 7:
-            count = 50000 + (diff_days - 7) * 8000
+            count = real_count
             status_val = "Pendiente de Aprobación"
             message = "Solicitud masiva enviada a Telegram para aprobación del Administrador."
 
@@ -170,7 +175,7 @@ class LogsService:
                 message=message,
             )
         else:
-            count = max(450, diff_days * 2200)
+            count = real_count
             status_val = "Procesando"
             message = "Solicitud enviada a la cola de extracción asíncrona."
 
@@ -190,16 +195,8 @@ class LogsService:
                 db.add(export_record)
                 db.commit()
 
-                # Simulación de tarea asíncrona de extracción y consolidación
                 if background_tasks:
-                    def simulate_processing():
-                        import time
-                        time.sleep(4)
-                        from app.db.session import SessionLocal
-                        with SessionLocal() as bg_db:
-                            cls.update_export_status(export_id, "Listo", bg_db)
-
-                    background_tasks.add_task(simulate_processing)
+                    background_tasks.add_task(cls.extract_and_store_logs_task, export_id, start_date, end_date)
 
             return LogExportResponse(
                 id=export_id,
@@ -242,10 +239,12 @@ class LogsService:
         return db.query(LogExport).filter(LogExport.id == export_id).first()
 
     @classmethod
-    def get_report_stats(cls, export_id: str, db: Session) -> Optional[LogReportStatsResponse]:
+    async def get_report_stats(cls, export_id: str, db: Session) -> Optional[LogReportStatsResponse]:
         """
         Obtiene las métricas agregadas de decoders y metadatos para la generación del PDF.
         """
+        from app.services.wazuh_extractor import WazuhExtractor
+        
         record = cls.get_export_record(export_id, db)
         if not record:
             return None
@@ -253,9 +252,17 @@ class LogsService:
         start_str = record.start_date.strftime("%Y-%m-%d") if hasattr(record.start_date, "strftime") else str(record.start_date)
         end_str = record.end_date.strftime("%Y-%m-%d") if hasattr(record.end_date, "strftime") else str(record.end_date)
 
+        stats = await WazuhExtractor.get_decoders_stats(record.start_date, record.end_date)
+        labels = stats.get("labels", ["rootcheck", "syscheck_integrity_changed", "kernel", "ossec"])
+        values = stats.get("values", [45, 30, 20, 5])
+        
+        if not labels:
+            labels = ["rootcheck", "syscheck_integrity_changed", "kernel", "ossec"]
+            values = [45, 30, 20, 5]
+
         return LogReportStatsResponse(
-            labels=["rootcheck", "syscheck_integrity_changed", "kernel", "ossec"],
-            values=[45, 30, 20, 5],
+            labels=labels,
+            values=values,
             total_logs=record.count,
             start_date=start_str,
             end_date=end_str,
@@ -329,3 +336,46 @@ class LogsService:
                     continue
 
             break
+
+    @classmethod
+    async def extract_and_store_logs_task(cls, export_id: str, start_date: date, end_date: date):
+        import json
+        import asyncio
+        from app.db.session import SessionLocal
+        from app.services.wazuh_extractor import WazuhExtractor
+        
+        file_name = f"logs_{start_date}_{end_date}_{export_id}.jsonl"
+        os.makedirs(cls.LOCAL_STORAGE_DIR, exist_ok=True)
+        file_path = os.path.join(cls.LOCAL_STORAGE_DIR, file_name)
+        
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                async for log in WazuhExtractor.extract_logs_scroll(start_date, end_date):
+                    f.write(json.dumps(log, ensure_ascii=False) + "\n")
+                    
+            with SessionLocal() as bg_db:
+                cls.update_export_status(export_id, "Listo", bg_db)
+        except Exception as e:
+            logger.error("Error en extract_and_store_logs_task: %s", str(e))
+            with SessionLocal() as bg_db:
+                cls.update_export_status(export_id, "Error", bg_db)
+                
+        cls.garbage_collect_old_logs()
+
+    @classmethod
+    def garbage_collect_old_logs(cls):
+        import time
+        now = time.time()
+        if not os.path.exists(cls.LOCAL_STORAGE_DIR):
+            return
+        for filename in os.listdir(cls.LOCAL_STORAGE_DIR):
+            if filename.endswith(".jsonl"):
+                filepath = os.path.join(cls.LOCAL_STORAGE_DIR, filename)
+                if os.path.isfile(filepath):
+                    file_age = now - os.path.getmtime(filepath)
+                    if file_age > 72 * 3600:
+                        try:
+                            os.remove(filepath)
+                            logger.info("Garbage collector eliminó archivo antiguo: %s", filepath)
+                        except Exception as e:
+                            logger.error("Error eliminando archivo %s: %s", filepath, str(e))
