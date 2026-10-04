@@ -42,3 +42,7 @@ postgres_data/
 # OS Specific
 .DS_Store
 Thumbs.db
+
+# Guias personales de prueba (no versionar: solo uso local del desarrollador)
+docs/guia_endpoints_sprint3.md
+.agents/rules/anti_hardcoded_rbac.md
