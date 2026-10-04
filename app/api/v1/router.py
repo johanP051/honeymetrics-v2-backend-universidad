@@ -16,7 +16,6 @@ api_router.include_router(blacklist_router)
 api_router.include_router(admin_router)
 
 
-
 # main.py ya agrega el prefijo /api/v1 en: app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Se agregan todas las rutas definidas en auth_endpoints.py

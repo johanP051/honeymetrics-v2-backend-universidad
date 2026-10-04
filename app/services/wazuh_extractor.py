@@ -23,15 +23,72 @@ class WazuhExtractor:
         return bool(settings.WAZUH_INDEXER_URL and settings.WAZUH_INDEXER_USER and settings.WAZUH_INDEXER_PASSWORD)
 
     @classmethod
-    async def count_events_for_range(cls, target_date: date) -> int:
+    async def check_connection(cls) -> bool:
+        """Realiza un health check profundo a Wazuh."""
+        if not cls.is_configured():
+            return False
+        url = f"{settings.WAZUH_INDEXER_URL}/_cluster/health"
+        auth = (settings.WAZUH_INDEXER_USER, settings.WAZUH_INDEXER_PASSWORD)
+        try:
+            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=5.0) as client:
+                response = await client.get(url, auth=auth)
+                return response.status_code == 200
+        except Exception as e:
+            logger.warning("Wazuh health check failed: %s", str(e))
+            return False
+
+    @classmethod
+    async def get_recent_attackers(cls) -> Optional[List[Dict[str, Any]]]:
+        """Obtiene las IPs atacantes y sus métricas desde Wazuh mediante aggregations."""
+        if not await cls.check_connection():
+            return None
+        url = f"{settings.WAZUH_INDEXER_URL}/wazuh-alerts-*/_search"
+        auth = (settings.WAZUH_INDEXER_USER, settings.WAZUH_INDEXER_PASSWORD)
+        query = {
+            "size": 0,
+            "aggs": {
+                "top_ips": {
+                    "terms": {"field": "data.srcip", "size": 50},
+                    "aggs": {
+                        "severity": {"avg": {"field": "rule.level"}},
+                        "users": {"terms": {"field": "data.dstuser"}},
+                        "tactics": {"terms": {"field": "rule.mitre.tactic"}},
+                        "months": {"date_histogram": {"field": "@timestamp", "calendar_interval": "month"}}
+                    }
+                }
+            }
+        }
+        try:
+            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=10.0) as client:
+                resp = await client.post(url, auth=auth, json=query)
+                if resp.status_code == 200:
+                    aggs = resp.json().get("aggregations", {}).get("top_ips", {}).get("buckets", [])
+                    results = []
+                    for bucket in aggs:
+                        results.append({
+                            "ip": bucket["key"],
+                            "total_events": bucket["doc_count"],
+                            "months": [b["key_as_string"] for b in bucket.get("months", {}).get("buckets", [])],
+                            "avg_severity": bucket.get("severity", {}).get("value", 5.0) or 5.0,
+                            "badge": "Dynamic Threat",
+                            "primary_tactic": bucket.get("tactics", {}).get("buckets", [{"key": "Unknown"}])[0]["key"] if bucket.get("tactics", {}).get("buckets") else "Unknown",
+                            "users": [b["key"] for b in bucket.get("users", {}).get("buckets", [])]
+                        })
+                    return results
+        except Exception as e:
+            logger.warning("Fallo al obtener atacantes recientes de Wazuh: %s", str(e))
+        return None
+
+    @classmethod
+    async def count_events_for_range(cls, start_date: date, end_date: date) -> int:
         """
-        Consulta la cantidad de eventos registrados en Wazuh para una fecha específica.
+        Consulta la cantidad de eventos registrados en Wazuh para un rango de fechas.
         """
         if not cls.is_configured():
             return 0
 
-        start_iso = f"{target_date}T00:00:00.000Z"
-        end_iso = f"{target_date}T23:59:59.999Z"
+        start_iso = f"{start_date}T00:00:00.000Z"
+        end_iso = f"{end_date}T23:59:59.999Z"
         url = f"{settings.WAZUH_INDEXER_URL}/wazuh-alerts-*/_count"
         auth = (settings.WAZUH_INDEXER_USER, settings.WAZUH_INDEXER_PASSWORD)
 
@@ -154,3 +211,110 @@ class WazuhExtractor:
                         )
                 except Exception:
                     pass
+
+    @classmethod
+    async def extract_logs_scroll(cls, start_date: date, end_date: date, chunk_size: int = 5000):
+        """Extrae logs usando Scroll API para un rango de fechas."""
+        if not cls.is_configured():
+            return
+            
+        start_iso = f"{start_date}T00:00:00.000Z"
+        end_iso = f"{end_date}T23:59:59.999Z"
+        search_url = f"{settings.WAZUH_INDEXER_URL}/wazuh-alerts-*/_search?scroll=2m"
+        auth = (settings.WAZUH_INDEXER_USER, settings.WAZUH_INDEXER_PASSWORD)
+        
+        query = {
+            "size": chunk_size,
+            "query": {
+                "bool": {
+                    "must": [
+                        {"range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}}
+                    ],
+                    "must_not": [
+                        {"terms": {"rule.groups": ["low_diskspace"]}}
+                    ]
+                }
+            },
+            "sort": [{"@timestamp": {"order": "asc"}}]
+        }
+        
+        scroll_id = None
+        try:
+            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=30.0) as client:
+                resp = await client.post(search_url, auth=auth, json=query)
+                if resp.status_code != 200:
+                    logger.warning("Wazuh respondió con error HTTP %d al iniciar scroll.", resp.status_code)
+                    return
+                    
+                data = resp.json()
+                scroll_id = data.get("_scroll_id")
+                hits = data.get("hits", {}).get("hits", [])
+                
+                while hits:
+                    for hit in hits:
+                        yield hit.get("_source", {})
+                        
+                    scroll_url = f"{settings.WAZUH_INDEXER_URL}/_search/scroll"
+                    scroll_resp = await client.post(
+                        scroll_url,
+                        auth=auth,
+                        json={"scroll": "2m", "scroll_id": scroll_id}
+                    )
+                    if scroll_resp.status_code != 200:
+                        break
+                    scroll_data = scroll_resp.json()
+                    scroll_id = scroll_data.get("_scroll_id")
+                    hits = scroll_data.get("hits", {}).get("hits", [])
+        except Exception as e:
+            logger.error("Error durante extract_logs_scroll: %s", str(e))
+        finally:
+            if scroll_id:
+                try:
+                    async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=5.0) as client:
+                        await client.request(
+                            "DELETE",
+                            f"{settings.WAZUH_INDEXER_URL}/_search/scroll",
+                            auth=auth,
+                            json={"scroll_id": scroll_id},
+                        )
+                except Exception:
+                    pass
+
+    @classmethod
+    async def get_decoders_stats(cls, start_date: date, end_date: date) -> Dict[str, Any]:
+        """Agrega los decodificadores y retorna un dict con labels y values."""
+        if not cls.is_configured():
+            return {"labels": [], "values": [], "total": 0}
+            
+        start_iso = f"{start_date}T00:00:00.000Z"
+        end_iso = f"{end_date}T23:59:59.999Z"
+        url = f"{settings.WAZUH_INDEXER_URL}/wazuh-alerts-*/_search"
+        auth = (settings.WAZUH_INDEXER_USER, settings.WAZUH_INDEXER_PASSWORD)
+        
+        query = {
+            "size": 0,
+            "query": {
+                "range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}
+            },
+            "aggs": {
+                "decoders": {
+                    "terms": {"field": "decoder.name", "size": 10}
+                }
+            }
+        }
+        
+        try:
+            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=15.0) as client:
+                resp = await client.post(url, auth=auth, json=query)
+                if resp.status_code == 200:
+                    aggs = resp.json().get("aggregations", {}).get("decoders", {}).get("buckets", [])
+                    total = resp.json().get("hits", {}).get("total", {}).get("value", 0)
+                    if isinstance(total, dict):
+                        total = total.get("value", 0)
+                    labels = [b["key"] for b in aggs]
+                    values = [b["doc_count"] for b in aggs]
+                    return {"labels": labels, "values": values, "total": total}
+        except Exception as e:
+            logger.warning("Fallo al obtener stats de decoders: %s", str(e))
+            
+        return {"labels": [], "values": [], "total": 0}
