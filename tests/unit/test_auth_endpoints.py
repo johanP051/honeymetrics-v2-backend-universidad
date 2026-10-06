@@ -12,6 +12,7 @@ from app.core.security import hash_password
 
 from fastapi.testclient import TestClient
 
+
 @pytest.fixture
 def test_engine():
     return create_engine(
@@ -19,6 +20,7 @@ def test_engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
 
 @pytest.fixture
 def test_database(test_engine):
@@ -28,10 +30,12 @@ def test_database(test_engine):
 
     Base.metadata.drop_all(bind=test_engine)
 
+
 @pytest.fixture
 def db_session(test_engine, test_database):
     with Session(test_engine) as session:
         yield session
+
 
 @pytest.fixture
 def active_user(db_session):
@@ -52,16 +56,18 @@ def active_user(db_session):
 
     db_session.add(user)
     db_session.commit()
-    db_session.refresh(user) # Despues de esto se deberia crear el identificador
+    db_session.refresh(user)  # Despues de esto se deberia crear el identificador
 
     # Entrega el user al test que lo solicite
     return user
+
 
 # Probar preparacion de datos
 def test_active_user_is_created(db_session, active_user):
     assert active_user.id is not None
     assert active_user.email == "admin@example.com"
     assert active_user.role.name == "admin"
+
 
 @pytest.fixture
 def client(db_session):
@@ -75,13 +81,11 @@ def client(db_session):
 
     app.dependency_overrides.clear()
 
+
 def test_login_with_valid_credentials(client, active_user):
     response = client.post(
         "/api/v1/auth/login",
-        json={
-            "email": active_user.email,
-            "password": "Testing123"
-        }
+        json={"email": active_user.email, "password": "Testing123"},
     )
 
     assert response.status_code == 200
@@ -97,13 +101,14 @@ def test_login_with_valid_credentials(client, active_user):
     assert data["user"]["id"] == active_user.id
     assert data["user"]["first_names"] == active_user.first_names
 
+
 def test_login_with_invalid_email(client, active_user):
     response = client.post(
         "/api/v1/auth/login",
         json={
             "email": "correo-invalido.com",
             "password": "Testing123",
-        }
+        },
     )
 
     assert response.status_code == 422

@@ -50,7 +50,10 @@ class TelegramService:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(url, json=payload)
                 if response.status_code == 200:
-                    logger.info("Notificación de Telegram enviada exitosamente para export %s", export_id)
+                    logger.info(
+                        "Notificación de Telegram enviada exitosamente para export %s",
+                        export_id,
+                    )
                     return True
                 else:
                     logger.error(
@@ -96,11 +99,14 @@ class TelegramService:
         async with httpx.AsyncClient(timeout=10.0) as client:
             # 1. Responder al callback para quitar el spinner en la app de Telegram
             answer_url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
-            await client.post(answer_url, json={
-                "callback_query_id": callback_id,
-                "text": feedback,
-                "show_alert": False,
-            })
+            await client.post(
+                answer_url,
+                json={
+                    "callback_query_id": callback_id,
+                    "text": feedback,
+                    "show_alert": False,
+                },
+            )
 
             # 2. Actualizar el texto del mensaje original y remover los botones
             if message_id and chat_id:
@@ -110,13 +116,16 @@ class TelegramService:
                     f"La exportación masiva `{export_id}` ha sido *{action.lower()}* por el Administrador\\.\n"
                     f"Estado: `{'Aprobada y Lista para Descarga' if action == 'APROBADA' else 'Cancelada por Administrador'}`"
                 )
-                await client.post(edit_url, json={
-                    "chat_id": chat_id,
-                    "message_id": message_id,
-                    "text": new_text,
-                    "parse_mode": "MarkdownV2",
-                    "reply_markup": {"inline_keyboard": []},  # Elimina los botones
-                })
+                await client.post(
+                    edit_url,
+                    json={
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "text": new_text,
+                        "parse_mode": "MarkdownV2",
+                        "reply_markup": {"inline_keyboard": []},  # Elimina los botones
+                    },
+                )
 
         logger.info("Callback Telegram procesado para export %s: %s", export_id, action)
         return {"status": "success", "export_id": export_id, "action": action}

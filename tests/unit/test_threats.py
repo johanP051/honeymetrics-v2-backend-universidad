@@ -8,7 +8,6 @@ from app.schemas.threat_schema import (
     AttackerIPSchema,
     BotnetSubnetSchema,
     ThreatSummarySchema,
-    HealthResponseSchema,
 )
 
 client = TestClient(app)
@@ -18,14 +17,19 @@ client = TestClient(app)
 # Pruebas Unitarias del Servicio (ThreatService)
 # ==========================================
 
+
 def test_threat_score_calculation_bounds():
     """Valida los límites matemáticos del algoritmo de Threat Score (0 a 100)."""
     # Score mínimo
-    score_low = ThreatService.calculate_threat_score(total_events=10, months_count=0, avg_severity=1.0, tactics_variety=1)
+    score_low = ThreatService.calculate_threat_score(
+        total_events=10, months_count=0, avg_severity=1.0, tactics_variety=1
+    )
     assert 5 <= score_low <= 100
 
     # Score máximo saturado
-    score_high = ThreatService.calculate_threat_score(total_events=100000, months_count=5, avg_severity=10.0, tactics_variety=5)
+    score_high = ThreatService.calculate_threat_score(
+        total_events=100000, months_count=5, avg_severity=10.0, tactics_variety=5
+    )
     assert score_high == 100
 
 
@@ -35,7 +39,7 @@ async def test_get_top_persistent_threats_service():
     threats = await ThreatService.get_top_persistent_threats()
     assert len(threats) > 0
     assert isinstance(threats[0], AttackerIPSchema)
-    
+
     # Comprobar orden descendente
     scores = [t.threat_score for t in threats]
     assert scores == sorted(scores, reverse=True)
@@ -52,12 +56,15 @@ async def test_get_detected_botnets_service():
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("preset,expected_events", [
-    ("24h", 1920),
-    ("7d", 28400),
-    ("30d", 84200),
-    ("90d", 142000),
-])
+@pytest.mark.parametrize(
+    "preset,expected_events",
+    [
+        ("24h", 1920),
+        ("7d", 28400),
+        ("30d", 84200),
+        ("90d", 142000),
+    ],
+)
 async def test_threat_summary_presets_service(preset, expected_events):
     """Valida la respuesta del resumen CTI para cada uno de los presets temporales rápidos."""
     summary = await ThreatService.get_threat_summary(range_preset=preset)
@@ -88,6 +95,7 @@ async def test_threat_summary_invalid_inverted_dates():
 # ==========================================
 # Pruebas de Integración de Endpoints HTTP
 # ==========================================
+
 
 def test_api_health_endpoint():
     """Verifica el endpoint GET /api/v1/threats/health."""

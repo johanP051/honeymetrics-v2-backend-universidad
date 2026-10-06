@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 
+
 def test_login_request_accepts_valid_data():
     login_request = LoginRequest(
         email="correo@prueba.com",
@@ -19,6 +20,7 @@ def test_login_request_rejects_invalid_email():
             email="correo-invalido",
             password="Testing",
         )
+
 
 def test_login_request_requires_email():
     with pytest.raises(ValidationError):

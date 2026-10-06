@@ -1,8 +1,8 @@
 import json
 import logging
 import os
-from datetime import date, datetime
-from typing import Dict, Any, Generator, List, Optional
+from datetime import date
+from typing import Dict, Any, List, Optional
 import httpx
 
 from app.core.config import settings
@@ -53,10 +53,15 @@ class WazuhExtractor:
                         "severity": {"avg": {"field": "rule.level"}},
                         "users": {"terms": {"field": "data.dstuser"}},
                         "tactics": {"terms": {"field": "rule.mitre.tactic"}},
-                        "months": {"date_histogram": {"field": "@timestamp", "calendar_interval": "month"}}
-                    }
+                        "months": {
+                            "date_histogram": {
+                                "field": "@timestamp",
+                                "calendar_interval": "month",
+                            }
+                        },
+                    },
                 }
-            }
+            },
         }
         try:
             async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=10.0) as client:
@@ -65,15 +70,21 @@ class WazuhExtractor:
                     aggs = resp.json().get("aggregations", {}).get("top_ips", {}).get("buckets", [])
                     results = []
                     for bucket in aggs:
-                        results.append({
-                            "ip": bucket["key"],
-                            "total_events": bucket["doc_count"],
-                            "months": [b["key_as_string"] for b in bucket.get("months", {}).get("buckets", [])],
-                            "avg_severity": bucket.get("severity", {}).get("value", 5.0) or 5.0,
-                            "badge": "Dynamic Threat",
-                            "primary_tactic": bucket.get("tactics", {}).get("buckets", [{"key": "Unknown"}])[0]["key"] if bucket.get("tactics", {}).get("buckets") else "Unknown",
-                            "users": [b["key"] for b in bucket.get("users", {}).get("buckets", [])]
-                        })
+                        results.append(
+                            {
+                                "ip": bucket["key"],
+                                "total_events": bucket["doc_count"],
+                                "months": [b["key_as_string"] for b in bucket.get("months", {}).get("buckets", [])],
+                                "avg_severity": bucket.get("severity", {}).get("value", 5.0) or 5.0,
+                                "badge": "Dynamic Threat",
+                                "primary_tactic": (
+                                    bucket.get("tactics", {}).get("buckets", [{"key": "Unknown"}])[0]["key"]
+                                    if bucket.get("tactics", {}).get("buckets")
+                                    else "Unknown"
+                                ),
+                                "users": [b["key"] for b in bucket.get("users", {}).get("buckets", [])],
+                            }
+                        )
                     return results
         except Exception as e:
             logger.warning("Fallo al obtener atacantes recientes de Wazuh: %s", str(e))
@@ -95,12 +106,8 @@ class WazuhExtractor:
         query = {
             "query": {
                 "bool": {
-                    "must": [
-                        {"range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}}
-                    ],
-                    "must_not": [
-                        {"terms": {"rule.groups": ["low_diskspace"]}}
-                    ]
+                    "must": [{"range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}}],
+                    "must_not": [{"terms": {"rule.groups": ["low_diskspace"]}}],
                 }
             }
         }
@@ -143,15 +150,11 @@ class WazuhExtractor:
             "size": chunk_size,
             "query": {
                 "bool": {
-                    "must": [
-                        {"range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}}
-                    ],
-                    "must_not": [
-                        {"terms": {"rule.groups": ["low_diskspace"]}}
-                    ]
+                    "must": [{"range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}}],
+                    "must_not": [{"terms": {"rule.groups": ["low_diskspace"]}}],
                 }
             },
-            "sort": [{"@timestamp": {"order": "asc"}}]
+            "sort": [{"@timestamp": {"order": "asc"}}],
         }
 
         scroll_id = None
@@ -161,7 +164,10 @@ class WazuhExtractor:
             async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=30.0) as client:
                 resp = await client.post(search_url, auth=auth, json=query)
                 if resp.status_code != 200:
-                    logger.warning("Wazuh respondió con error HTTP %d al iniciar scroll.", resp.status_code)
+                    logger.warning(
+                        "Wazuh respondió con error HTTP %d al iniciar scroll.",
+                        resp.status_code,
+                    )
                     return None
 
                 data = resp.json()
@@ -185,7 +191,7 @@ class WazuhExtractor:
                         scroll_resp = await client.post(
                             scroll_url,
                             auth=auth,
-                            json={"scroll": "2m", "scroll_id": scroll_id}
+                            json={"scroll": "2m", "scroll_id": scroll_id},
                         )
                         if scroll_resp.status_code != 200:
                             break
@@ -193,11 +199,20 @@ class WazuhExtractor:
                         scroll_id = scroll_data.get("_scroll_id")
                         hits = scroll_data.get("hits", {}).get("hits", [])
 
-            logger.info("Extracción completada para %s: %d eventos guardados en %s", target_date, extracted_count, file_path)
+            logger.info(
+                "Extracción completada para %s: %d eventos guardados en %s",
+                target_date,
+                extracted_count,
+                file_path,
+            )
             return file_path
 
         except Exception as e:
-            logger.error("Error durante la extracción de logs de Wazuh para %s: %s", target_date, str(e))
+            logger.error(
+                "Error durante la extracción de logs de Wazuh para %s: %s",
+                target_date,
+                str(e),
+            )
             return None
         finally:
             if scroll_id:
@@ -217,48 +232,47 @@ class WazuhExtractor:
         """Extrae logs usando Scroll API para un rango de fechas."""
         if not cls.is_configured():
             return
-            
+
         start_iso = f"{start_date}T00:00:00.000Z"
         end_iso = f"{end_date}T23:59:59.999Z"
         search_url = f"{settings.WAZUH_INDEXER_URL}/wazuh-alerts-*/_search?scroll=2m"
         auth = (settings.WAZUH_INDEXER_USER, settings.WAZUH_INDEXER_PASSWORD)
-        
+
         query = {
             "size": chunk_size,
             "query": {
                 "bool": {
-                    "must": [
-                        {"range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}}
-                    ],
-                    "must_not": [
-                        {"terms": {"rule.groups": ["low_diskspace"]}}
-                    ]
+                    "must": [{"range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}}],
+                    "must_not": [{"terms": {"rule.groups": ["low_diskspace"]}}],
                 }
             },
-            "sort": [{"@timestamp": {"order": "asc"}}]
+            "sort": [{"@timestamp": {"order": "asc"}}],
         }
-        
+
         scroll_id = None
         try:
             async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=30.0) as client:
                 resp = await client.post(search_url, auth=auth, json=query)
                 if resp.status_code != 200:
-                    logger.warning("Wazuh respondió con error HTTP %d al iniciar scroll.", resp.status_code)
+                    logger.warning(
+                        "Wazuh respondió con error HTTP %d al iniciar scroll.",
+                        resp.status_code,
+                    )
                     return
-                    
+
                 data = resp.json()
                 scroll_id = data.get("_scroll_id")
                 hits = data.get("hits", {}).get("hits", [])
-                
+
                 while hits:
                     for hit in hits:
                         yield hit.get("_source", {})
-                        
+
                     scroll_url = f"{settings.WAZUH_INDEXER_URL}/_search/scroll"
                     scroll_resp = await client.post(
                         scroll_url,
                         auth=auth,
-                        json={"scroll": "2m", "scroll_id": scroll_id}
+                        json={"scroll": "2m", "scroll_id": scroll_id},
                     )
                     if scroll_resp.status_code != 200:
                         break
@@ -285,24 +299,18 @@ class WazuhExtractor:
         """Agrega los decodificadores y retorna un dict con labels y values."""
         if not cls.is_configured():
             return {"labels": [], "values": [], "total": 0}
-            
+
         start_iso = f"{start_date}T00:00:00.000Z"
         end_iso = f"{end_date}T23:59:59.999Z"
         url = f"{settings.WAZUH_INDEXER_URL}/wazuh-alerts-*/_search"
         auth = (settings.WAZUH_INDEXER_USER, settings.WAZUH_INDEXER_PASSWORD)
-        
+
         query = {
             "size": 0,
-            "query": {
-                "range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}
-            },
-            "aggs": {
-                "decoders": {
-                    "terms": {"field": "decoder.name", "size": 10}
-                }
-            }
+            "query": {"range": {"@timestamp": {"gte": start_iso, "lte": end_iso}}},
+            "aggs": {"decoders": {"terms": {"field": "decoder.name", "size": 10}}},
         }
-        
+
         try:
             async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=15.0) as client:
                 resp = await client.post(url, auth=auth, json=query)
@@ -316,5 +324,5 @@ class WazuhExtractor:
                     return {"labels": labels, "values": values, "total": total}
         except Exception as e:
             logger.warning("Fallo al obtener stats de decoders: %s", str(e))
-            
+
         return {"labels": [], "values": [], "total": 0}
