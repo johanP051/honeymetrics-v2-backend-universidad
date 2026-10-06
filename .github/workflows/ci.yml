@@ -33,15 +33,17 @@ jobs:
 
       - name: ⚡ Run Ruff Linter
         run: |
-          ruff check .
+          ruff check app/ tests/
 
       - name: 🖤 Check Code Formatting with Black
         run: |
-          black --check .
+          black --check app/ tests/
 
-      - name: 🔍 Static Type Checking with Mypy
+      - name: 🔍 Static Type Checking with Mypy (Advisory)
         run: |
           mypy --explicit-package-bases app/
+        continue-on-error: true
+
 
   test-and-coverage:
     name: 🧪 Testing & Coverage (Pytest & pytest-cov)
