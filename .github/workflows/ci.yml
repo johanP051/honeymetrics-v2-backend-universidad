@@ -1,12 +1,48 @@
-name: Backend CI & Quality Gate
+name: Backend CI/CD Pipeline & Quality Gate
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, QA ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, QA ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  lint-and-style:
+    name: 🎨 Linting & Code Style (Ruff, Black, Mypy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 📦 Install Linting & Typing Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black mypy
+
+      - name: ⚡ Run Ruff Linter
+        run: |
+          ruff check .
+
+      - name: 🖤 Check Code Formatting with Black
+        run: |
+          black --check .
+
+      - name: 🔍 Static Type Checking with Mypy
+        run: |
+          mypy --explicit-package-bases app/
+
   test-and-lint:
     name: 🧪 Run Pytest & Schema Validation
     runs-on: ubuntu-latest
