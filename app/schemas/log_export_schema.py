@@ -33,7 +33,10 @@ class LogExportItemResponse(BaseModel):
 
 
 class LogReportStatsResponse(BaseModel):
-    labels: list[str] = Field(..., description="Lista de decoders de Wazuh (rootcheck, kernel, syscheck, etc.)")
+    labels: list[str] = Field(
+        ...,
+        description="Lista de decoders de Wazuh (rootcheck, kernel, syscheck, etc.)",
+    )
     values: list[int] = Field(..., description="Porcentajes o conteos relativos por decoder")
     total_logs: int = Field(..., description="Total de logs agregados en la muestra")
     start_date: str = Field(..., description="Fecha inicial en formato ISO YYYY-MM-DD")

@@ -6,6 +6,7 @@ import ipaddress
 
 class BlacklistEntryCreate(BaseModel):
     """DTO de entrada para registrar una nueva IP en la Blacklist."""
+
     ip: str = Field(..., description="Dirección IP del atacante o IOC", example="45.148.10.151")
     ip_type: str = Field(default="IPv4", description="Tipo de indicador (IPv4, IPv6)")
     country: str = Field(default="Unknown", description="País de origen estimado")
@@ -26,6 +27,7 @@ class BlacklistEntryCreate(BaseModel):
 
 class BlacklistEntryUpdate(BaseModel):
     """DTO de actualización parcial (PATCH-style) para una entrada de Blacklist."""
+
     ip: Optional[str] = Field(default=None)
     ip_type: Optional[str] = Field(default=None)
     country: Optional[str] = Field(default=None)
@@ -47,6 +49,7 @@ class BlacklistEntryUpdate(BaseModel):
 
 class BlacklistEntryResponse(BaseModel):
     """DTO de salida con datos completos de una entrada en la Blacklist."""
+
     id: int
     ip: str
     ip_type: str

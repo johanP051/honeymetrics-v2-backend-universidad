@@ -85,8 +85,18 @@ class LogsService:
     def _format_datetime(cls, dt: datetime) -> str:
         """Formatea un datetime para presentación amigable y consistente."""
         meses = [
-            "enero", "febrero", "marzo", "abril", "mayo", "junio",
-            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+            "enero",
+            "febrero",
+            "marzo",
+            "abril",
+            "mayo",
+            "junio",
+            "julio",
+            "agosto",
+            "septiembre",
+            "octubre",
+            "noviembre",
+            "diciembre",
         ]
         mes = meses[dt.month - 1]
         hora_12 = dt.hour % 12 or 12
@@ -122,7 +132,7 @@ class LogsService:
         db: Optional[Session] = None,
     ) -> LogExportResponse:
         from app.services.wazuh_extractor import WazuhExtractor
-        
+
         diff_days = (end_date - start_date).days + 1
         export_id = f"EXP-{random.randint(1000, 9999)}"
         date_range = f"{start_date} / {end_date}"
@@ -244,18 +254,20 @@ class LogsService:
         Obtiene las métricas agregadas de decoders y metadatos para la generación del PDF.
         """
         from app.services.wazuh_extractor import WazuhExtractor
-        
+
         record = cls.get_export_record(export_id, db)
         if not record:
             return None
 
-        start_str = record.start_date.strftime("%Y-%m-%d") if hasattr(record.start_date, "strftime") else str(record.start_date)
+        start_str = (
+            record.start_date.strftime("%Y-%m-%d") if hasattr(record.start_date, "strftime") else str(record.start_date)
+        )
         end_str = record.end_date.strftime("%Y-%m-%d") if hasattr(record.end_date, "strftime") else str(record.end_date)
 
         stats = await WazuhExtractor.get_decoders_stats(record.start_date, record.end_date)
         labels = stats.get("labels", ["rootcheck", "syscheck_integrity_changed", "kernel", "ossec"])
         values = stats.get("values", [45, 30, 20, 5])
-        
+
         if not labels:
             labels = ["rootcheck", "syscheck_integrity_changed", "kernel", "ossec"]
             values = [45, 30, 20, 5]
@@ -306,11 +318,15 @@ class LogsService:
 
         # Nivel 1: Buscar archivos particionados diarios en data/downloads
         partitioned_files = cls.get_partitioned_files_for_range(record.start_date, record.end_date)
-        source_files = partitioned_files if partitioned_files else [p for p in cls.DATASET_CANDIDATE_PATHS if os.path.exists(p)]
+        source_files = (
+            partitioned_files if partitioned_files else [p for p in cls.DATASET_CANDIDATE_PATHS if os.path.exists(p)]
+        )
 
         if not source_files:
             # Nivel 3: Fallback sintético defensivo
-            yield f'{{"event": "honeymetrics_log", "export_id": "{export_id}", "range": "{record.date_range}", "notice": "Dataset sintetico de desarrollo"}}\n'.encode("utf-8")
+            yield f'{{"event": "honeymetrics_log", "export_id": "{export_id}", "range": "{record.date_range}", "notice": "Dataset sintetico de desarrollo"}}\n'.encode(
+                "utf-8"
+            )
             return
 
         # Nivel 1 y 2: Streaming en bloques sin saturar memoria RAM
@@ -340,31 +356,31 @@ class LogsService:
     @classmethod
     async def extract_and_store_logs_task(cls, export_id: str, start_date: date, end_date: date):
         import json
-        import asyncio
         from app.db.session import SessionLocal
         from app.services.wazuh_extractor import WazuhExtractor
-        
+
         file_name = f"logs_{start_date}_{end_date}_{export_id}.jsonl"
         os.makedirs(cls.LOCAL_STORAGE_DIR, exist_ok=True)
         file_path = os.path.join(cls.LOCAL_STORAGE_DIR, file_name)
-        
+
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 async for log in WazuhExtractor.extract_logs_scroll(start_date, end_date):
                     f.write(json.dumps(log, ensure_ascii=False) + "\n")
-                    
+
             with SessionLocal() as bg_db:
                 cls.update_export_status(export_id, "Listo", bg_db)
         except Exception as e:
             logger.error("Error en extract_and_store_logs_task: %s", str(e))
             with SessionLocal() as bg_db:
                 cls.update_export_status(export_id, "Error", bg_db)
-                
+
         cls.garbage_collect_old_logs()
 
     @classmethod
     def garbage_collect_old_logs(cls):
         import time
+
         now = time.time()
         if not os.path.exists(cls.LOCAL_STORAGE_DIR):
             return
@@ -376,6 +392,9 @@ class LogsService:
                     if file_age > 72 * 3600:
                         try:
                             os.remove(filepath)
-                            logger.info("Garbage collector eliminó archivo antiguo: %s", filepath)
+                            logger.info(
+                                "Garbage collector eliminó archivo antiguo: %s",
+                                filepath,
+                            )
                         except Exception as e:
                             logger.error("Error eliminando archivo %s: %s", filepath, str(e))

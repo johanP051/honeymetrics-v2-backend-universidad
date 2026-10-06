@@ -5,6 +5,7 @@ Proporciona guardas de autenticación y autorización (RBAC) reutilizables:
   - get_current_user: extrae y valida el JWT, devuelve el User activo.
   - require_admin_user: restringe el acceso a usuarios con rol "Administrador".
 """
+
 from typing import Optional
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session

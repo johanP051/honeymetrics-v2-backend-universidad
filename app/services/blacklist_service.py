@@ -9,6 +9,7 @@ Invariantes de Dominio:
   3. Auto-cálculo de status: si score > 70 → "Bloqueada", si no → "Monitoreada".
   4. Trazabilidad: toda entrada registra el ID del administrador que la creó.
 """
+
 import ipaddress
 import socket
 from datetime import datetime, timezone
@@ -20,21 +21,20 @@ from sqlalchemy.orm import Session
 from app.models.blacklist_model import BlacklistEntry
 from app.schemas.blacklist_schema import BlacklistEntryCreate, BlacklistEntryUpdate
 
-
 # Whitelist interna inmutable: IPs que NUNCA pueden ser bloqueadas
 _PROTECTED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),    # Loopback
-    ipaddress.ip_network("10.0.0.0/8"),     # RFC 1918 Clase A
+    ipaddress.ip_network("127.0.0.0/8"),  # Loopback
+    ipaddress.ip_network("10.0.0.0/8"),  # RFC 1918 Clase A
     ipaddress.ip_network("172.16.0.0/12"),  # RFC 1918 Clase B
-    ipaddress.ip_network("192.168.0.0/16"), # RFC 1918 Clase C
+    ipaddress.ip_network("192.168.0.0/16"),  # RFC 1918 Clase C
 ]
 
 _PROTECTED_HOSTS = {
-    "8.8.8.8",    # Google DNS primario
-    "8.8.4.4",    # Google DNS secundario
-    "1.1.1.1",    # Cloudflare DNS primario
-    "1.0.0.1",    # Cloudflare DNS secundario
-    "9.9.9.9",    # Quad9 DNS
+    "8.8.8.8",  # Google DNS primario
+    "8.8.4.4",  # Google DNS secundario
+    "1.1.1.1",  # Cloudflare DNS primario
+    "1.0.0.1",  # Cloudflare DNS secundario
+    "9.9.9.9",  # Quad9 DNS
 }
 
 
@@ -94,11 +94,7 @@ class BlacklistService:
     @classmethod
     def get_all(cls, db: Session) -> List[BlacklistEntry]:
         """Retorna todas las entradas ordenadas por threat_score descendente."""
-        return (
-            db.query(BlacklistEntry)
-            .order_by(BlacklistEntry.threat_score.desc())
-            .all()
-        )
+        return db.query(BlacklistEntry).order_by(BlacklistEntry.threat_score.desc()).all()
 
     @classmethod
     def get_by_id(cls, entry_id: int, db: Session) -> BlacklistEntry:

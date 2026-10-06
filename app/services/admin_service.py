@@ -6,6 +6,7 @@ Invariantes de Dominio:
   2. Un administrador no puede desactivar su propia cuenta.
   3. La contraseña se hashea con Argon2 antes de persistir.
 """
+
 from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
@@ -17,8 +18,8 @@ from app.core.security import hash_password
 from app.models.user_model import User
 from app.models.role_model import Role
 
-
 # ─── DTOs internos del Admin Service ────────────────────────────────────────
+
 
 class UserListItemResponse(BaseModel):
     id: int
@@ -46,6 +47,7 @@ class UserUpdateAdminRequest(BaseModel):
 
 
 # ─── Service ────────────────────────────────────────────────────────────────
+
 
 class AdminService:
     """

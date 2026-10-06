@@ -1,7 +1,7 @@
 import os
 import re
 import logging
-from datetime import datetime, date, timedelta, timezone
+from datetime import datetime, date, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,10 @@ class RetentionService:
         Retorna la cantidad de archivos eliminados.
         """
         if not os.path.exists(storage_dir):
-            logger.info("Directorio de almacenamiento %s no existe. Omitiendo limpieza.", storage_dir)
+            logger.info(
+                "Directorio de almacenamiento %s no existe. Omitiendo limpieza.",
+                storage_dir,
+            )
             return 0
 
         cutoff_date = date.today() - timedelta(days=max_days)
@@ -41,9 +44,17 @@ class RetentionService:
                     file_path = os.path.join(storage_dir, filename)
                     os.remove(file_path)
                     removed_count += 1
-                    logger.info("Archivo de log expirado purgado (TTL %d días): %s", max_days, filename)
+                    logger.info(
+                        "Archivo de log expirado purgado (TTL %d días): %s",
+                        max_days,
+                        filename,
+                    )
             except ValueError:
                 continue
 
-        logger.info("Ciclo de retención completado: %d archivos purgados en %s.", removed_count, storage_dir)
+        logger.info(
+            "Ciclo de retención completado: %d archivos purgados en %s.",
+            removed_count,
+            storage_dir,
+        )
         return removed_count

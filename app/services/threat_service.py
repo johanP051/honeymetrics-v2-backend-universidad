@@ -129,13 +129,15 @@ class ThreatService:
 
         results = []
         for subnet, data in subnets.items():
-            results.append(BotnetSubnetSchema(
-                subnet=subnet,
-                total_events=data["total_events"],
-                distinct_ips_count=len(data["ips"]),
-                sample_ips=list(data["ips"])[:3],
-                suggested_action=f"Request analyst review ({len(data['ips'])} active attacker nodes)"
-            ))
+            results.append(
+                BotnetSubnetSchema(
+                    subnet=subnet,
+                    total_events=data["total_events"],
+                    distinct_ips_count=len(data["ips"]),
+                    sample_ips=list(data["ips"])[:3],
+                    suggested_action=f"Request analyst review ({len(data['ips'])} active attacker nodes)",
+                )
+            )
 
         return sorted(results, key=lambda x: x.total_events, reverse=True)[:5]
 
@@ -192,7 +194,7 @@ class ThreatService:
                     generated_at=datetime.now(timezone.utc),
                 )
             except Exception:
-                pass # Fallback to static below
+                pass  # Fallback to static below
 
         total_events = 165247
         unique_ips = 1107
@@ -225,9 +227,9 @@ class ThreatService:
             ratio = min(1.0, days / total_window_days)
 
             total_events = int(165247 * ratio)
-            unique_ips = max(1, int(1107 * (ratio ** 0.5)))
+            unique_ips = max(1, int(1107 * (ratio**0.5)))
             persistent_threats = max(1, int(9 * ratio)) if ratio > 0.3 else min(9, int(9 * ratio) + 1)
-            cves_count = int(1721 * (ratio ** 0.4))
+            cves_count = int(1721 * (ratio**0.4))
         elif range_preset == "24h":
             total_events = 1920
             unique_ips = 84

@@ -2,6 +2,7 @@
 Endpoints del Threat Intelligence Center — Blacklist CRUD.
 Todos los endpoints de escritura (POST, PUT, DELETE) requieren rol Administrador.
 """
+
 from typing import List
 
 from fastapi import APIRouter, Depends, status

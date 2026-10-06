@@ -8,6 +8,7 @@ class LogExport(Base):
     Modelo de Base de Datos para el historial persistente de exportaciones de logs crudos
     y trazabilidad de autorizaciones Human-in-the-Loop vía Telegram.
     """
+
     __tablename__ = "log_exports"
 
     id = Column(String(30), primary_key=True, index=True)

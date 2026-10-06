@@ -14,6 +14,7 @@ class BlacklistEntry(Base):
 
     Trazabilidad: blocked_by_user_id guarda quién registró la entrada.
     """
+
     __tablename__ = "blacklist_entries"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -21,8 +22,8 @@ class BlacklistEntry(Base):
     ip_type = Column(String(10), default="IPv4", nullable=False)
     country = Column(String(100), default="Unknown", nullable=False)
     threat_score = Column(Integer, nullable=False)
-    category = Column(String(50), nullable=False)          # APT, Botnet, Scanner, Recon
-    status = Column(String(30), nullable=False)            # Bloqueada | Monitoreada
+    category = Column(String(50), nullable=False)  # APT, Botnet, Scanner, Recon
+    status = Column(String(30), nullable=False)  # Bloqueada | Monitoreada
     notes = Column(Text, nullable=True)
 
     # Trazabilidad de auditoría: qué usuario (admin) registró la entrada

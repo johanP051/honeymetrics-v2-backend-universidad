@@ -2,6 +2,7 @@
 Endpoints del Panel de Administración — Gestión de Usuarios del sistema.
 Todos los endpoints requieren rol Administrador.
 """
+
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, status
