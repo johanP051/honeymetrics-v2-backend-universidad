@@ -7,6 +7,7 @@ from app.core.security import hash_password
 from app.services.auth_service import authenticate_user
 import pytest
 
+
 @pytest.fixture
 def db():
     # Arrange en fixtures
@@ -36,13 +37,10 @@ def active_user(db):
 
     return user
 
+
 def test_correct_auth(db, active_user):
     # Act: llamada al servicio
-    authenticated_user = authenticate_user(
-        db,
-        "correo@prueba.com",
-        "Testing"
-    )
+    authenticated_user = authenticate_user(db, "correo@prueba.com", "Testing")
 
     assert authenticated_user is not None
     assert authenticated_user.id == active_user.id

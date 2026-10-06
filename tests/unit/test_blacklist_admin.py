@@ -8,6 +8,7 @@ Cubre:
   - RBAC: solo Administrador puede crear/actualizar/eliminar.
   - Trazabilidad: blocked_by_user_id persiste correctamente.
 """
+
 import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
@@ -38,17 +39,21 @@ MOCK_ANALYST_ROLE.name = "Analista"
 
 # ─── Tests de la Whitelist (Service Layer) ───────────────────────────────────
 
-@pytest.mark.parametrize("protected_ip", [
-    "127.0.0.1",
-    "10.0.0.1",
-    "192.168.1.100",
-    "172.16.50.1",
-    "8.8.8.8",
-    "8.8.4.4",
-    "1.1.1.1",
-    "1.0.0.1",
-    "9.9.9.9",
-])
+
+@pytest.mark.parametrize(
+    "protected_ip",
+    [
+        "127.0.0.1",
+        "10.0.0.1",
+        "192.168.1.100",
+        "172.16.50.1",
+        "8.8.8.8",
+        "8.8.4.4",
+        "1.1.1.1",
+        "1.0.0.1",
+        "9.9.9.9",
+    ],
+)
 def test_blacklist_create_protected_ips_raises_422(protected_ip: str):
     """Valida que IPs protegidas (RFC 1918, loopback, DNS públicos) no puedan registrarse."""
     from app.services.blacklist_service import BlacklistService
@@ -83,9 +88,11 @@ def test_blacklist_create_invalid_ip_format_raises_validation_error():
 
 # ─── Tests de Auto-cálculo de Status ─────────────────────────────────────────
 
+
 def test_auto_status_above_threshold_is_bloqueada():
     """Score > 70 debe resultar en status 'Bloqueada'."""
     from app.services.blacklist_service import BlacklistService
+
     assert BlacklistService._auto_status(71) == "Bloqueada"
     assert BlacklistService._auto_status(100) == "Bloqueada"
 
@@ -93,11 +100,13 @@ def test_auto_status_above_threshold_is_bloqueada():
 def test_auto_status_at_or_below_threshold_is_monitoreada():
     """Score <= 70 debe resultar en status 'Monitoreada'."""
     from app.services.blacklist_service import BlacklistService
+
     assert BlacklistService._auto_status(70) == "Monitoreada"
     assert BlacklistService._auto_status(0) == "Monitoreada"
 
 
 # ─── Tests de RBAC en la API HTTP ────────────────────────────────────────────
+
 
 @patch("app.api.deps.get_current_user", return_value=MOCK_ANALYST_USER)
 @patch("app.api.deps.require_admin_user", side_effect=Exception("Forbidden"))
@@ -112,21 +121,23 @@ def test_blacklist_post_by_analyst_returns_403(_mock_admin, _mock_user):
 def test_blacklist_get_returns_200(mock_get_all):
     """GET /blacklist/ retorna 200 con lista vacía cuando no hay entradas."""
     from app.api.deps import get_current_user, require_admin_user
+
     app.dependency_overrides[get_current_user] = lambda: MOCK_ADMIN_USER
     app.dependency_overrides[require_admin_user] = lambda: MOCK_ADMIN_USER
-    
+
     response = client.get(
         "/api/v1/blacklist/",
         headers={"Authorization": "Bearer fake-token"},
     )
-    
+
     app.dependency_overrides = {}
-    
+
     assert response.status_code == 200
     assert response.json() == []
 
 
 # ─── Tests del AdminService (Invariantes de Dominio) ─────────────────────────
+
 
 def test_admin_cannot_delete_own_account():
     """Un admin no puede eliminar su propia cuenta."""
