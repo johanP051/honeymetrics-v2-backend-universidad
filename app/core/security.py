@@ -1,6 +1,7 @@
 from passlib.context import CryptContext
 
 from datetime import datetime, timedelta, timezone
+import uuid
 import jwt
 from app.core.config import settings
 
@@ -19,7 +20,8 @@ def create_access_token(subject: str) -> str:
 
     to_encode = {
         "sub": str(subject),
-        "exp": expire
+        "exp": expire,
+        "jti": uuid.uuid4().hex,
     }
 
     encoded_jwt = jwt.encode(

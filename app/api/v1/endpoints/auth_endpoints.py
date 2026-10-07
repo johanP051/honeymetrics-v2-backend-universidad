@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from app.core.security import create_access_token # importa la funcion que genera el JWT
 from app.db.session import get_db # proporciona la sesion de la BD
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
-from app.services.auth_service import authenticate_user
+from app.services.auth_service import authenticate_user, revoke_token
+from fastapi import Request
 
 # APIRouter es la herramienta que me permite agrupar rutas de FastAPI
 # router = APIRouter(...) crea un grupo de rutas, en este caso para autenticacion
@@ -54,6 +55,15 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> TokenResp
         token_type="bearer",
         user=UserResponse.model_validate(user),
     )
+
+
+@router.post("/logout")
+def logout(request: Request, db: Session = Depends(get_db)):
+    """Cierra la sesion revocando el JWT actual (port de guia)."""
+    authorization = request.headers.get("Authorization")
+    if authorization and authorization.startswith("Bearer "):
+        revoke_token(db, authorization.split(" ", 1)[1])
+    return {"message": "Sesión cerrada exitosamente."}
 
 # Cliente (React, Swagger, etc.)
 #     |
