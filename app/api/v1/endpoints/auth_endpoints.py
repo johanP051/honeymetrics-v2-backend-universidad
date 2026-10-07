@@ -7,8 +7,18 @@ from app.core.security import (
     create_access_token,
 )  # importa la funcion que genera el JWT
 from app.db.session import get_db  # proporciona la sesion de la BD
-from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
-from app.services.auth_service import authenticate_user
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserResponse,
+)
+from app.services.auth_service import (
+    authenticate_user,
+    process_password_recovery,
+    reset_user_password,
+)
 
 # APIRouter es la herramienta que me permite agrupar rutas de FastAPI
 # router = APIRouter(...) crea un grupo de rutas, en este caso para autenticacion
@@ -46,6 +56,18 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> TokenResp
         token_type="bearer",
         user=UserResponse.model_validate(user),
     )
+
+
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    process_password_recovery(db, str(payload.email))
+    return {"message": "Si el correo existe, se envió un enlace de recuperación."}
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    reset_user_password(db, payload.token, payload.new_password)
+    return {"message": "Contraseña actualizada. Inicia sesión."}
 
 
 # Cliente (React, Swagger, etc.)
