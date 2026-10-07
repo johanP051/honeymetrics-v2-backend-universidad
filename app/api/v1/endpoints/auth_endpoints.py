@@ -5,8 +5,19 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.security import create_access_token # importa la funcion que genera el JWT
 from app.db.session import get_db # proporciona la sesion de la BD
-from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
-from app.services.auth_service import authenticate_user, revoke_token
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserResponse,
+)
+from app.services.auth_service import (
+    authenticate_user,
+    process_password_recovery,
+    reset_user_password,
+    revoke_token,
+)
 from fastapi import Request
 
 # APIRouter es la herramienta que me permite agrupar rutas de FastAPI
@@ -64,6 +75,18 @@ def logout(request: Request, db: Session = Depends(get_db)):
     if authorization and authorization.startswith("Bearer "):
         revoke_token(db, authorization.split(" ", 1)[1])
     return {"message": "Sesión cerrada exitosamente."}
+
+
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    process_password_recovery(db, str(payload.email))
+    return {"message": "Si el correo existe, se envió un enlace de recuperación."}
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    reset_user_password(db, payload.token, payload.new_password)
+    return {"message": "Contraseña actualizada. Inicia sesión."}
 
 # Cliente (React, Swagger, etc.)
 #     |
