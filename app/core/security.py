@@ -15,8 +15,11 @@ def verify_password(password: str, hashed_password: str) -> bool:
     passwd_validation = pwd_context.verify(password, hashed_password)
     return passwd_validation
 
-def create_access_token(subject: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
+    if expires_delta is not None:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode = {
         "sub": str(subject),

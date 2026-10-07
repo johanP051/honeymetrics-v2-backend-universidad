@@ -8,6 +8,10 @@ from app.db.session import get_db # proporciona la sesion de la BD
 from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
+    MfaSetupResponse,
+    MfaTokenResponse,
+    MfaVerifyLoginRequest,
+    MfaVerifyRequest,
     ResetPasswordRequest,
     TokenResponse,
     UserResponse,
@@ -18,6 +22,14 @@ from app.services.auth_service import (
     reset_user_password,
     revoke_token,
 )
+from app.services.mfa_service import (
+    disable_mfa,
+    mfa_login_flow,
+    setup_mfa,
+    verify_and_enable_mfa,
+    verify_login_mfa,
+)
+from app.api.deps import get_current_user
 from fastapi import Request
 
 # APIRouter es la herramienta que me permite agrupar rutas de FastAPI
@@ -39,14 +51,13 @@ router = APIRouter(
 # Salida: la funcion devuelve un TokenResponse al cliente
 @router.post(
         "/login",
-        response_model=TokenResponse,
         responses={
             status.HTTP_401_UNAUTHORIZED: {
                 "description": "Credenciales inválidas"
             }
         }
 )
-def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate_user(
         db,
         str(credentials.email),
@@ -59,8 +70,43 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> TokenResp
             detail="Credenciales inválidas",
         )
 
+    mfa_result = mfa_login_flow(db, user)
+    if mfa_result.get("mfa_required"):
+        return MfaTokenResponse(
+            mfa_required=True,
+            mfa_token=mfa_result["mfa_token"],
+        )
+
     token = create_access_token(str(user.id))
 
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.post("/mfa/setup", response_model=MfaSetupResponse)
+def mfa_setup(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return setup_mfa(db, current_user)
+
+
+@router.post("/mfa/verify", status_code=status.HTTP_200_OK)
+def mfa_verify(payload: MfaVerifyRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    verify_and_enable_mfa(db, current_user, payload.code)
+    return {"message": "Autenticación de dos factores (2FA) activada correctamente."}
+
+
+@router.post("/mfa/disable", status_code=status.HTTP_200_OK)
+def mfa_disable(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    disable_mfa(db, current_user)
+    return {"message": "Autenticación de dos factores (2FA) desactivada."}
+
+
+@router.post("/mfa/verify-login", response_model=TokenResponse)
+def mfa_verify_login(payload: MfaVerifyLoginRequest, db: Session = Depends(get_db)):
+    user = verify_login_mfa(db, payload.mfa_token, payload.code)
+    token = create_access_token(str(user.id))
     return TokenResponse(
         access_token=token,
         token_type="bearer",
