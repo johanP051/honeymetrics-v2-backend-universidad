@@ -17,12 +17,18 @@ class Settings(BaseSettings):
     REQUIRE_PASSWORD_CHANGE_ON_FIRST_LOGIN: bool = True
 
     # Frontend Config & CORS
-    FRONTEND_URL: str = "http://localhost:5173"
+    FRONTEND_URL: str = "http://localhost:5174"
     BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:5174",
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://127.0.0.1:5174",
         "http://127.0.0.1:5173",
     ]
+
+    # Correo transaccional Resend (PB-HM-06.1, ente UDEC distinto de guía)
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "HoneyMetrics UDEC <udec-auth@johan-d3v.site>"
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
