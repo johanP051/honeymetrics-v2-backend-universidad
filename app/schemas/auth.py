@@ -25,6 +25,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     user: UserResponse | None = None
+    mfa_required: bool = False
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -34,4 +35,23 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    qr: str
+
+
+class MfaVerifyRequest(BaseModel):
+    code: str
+
+
+class MfaVerifyLoginRequest(BaseModel):
+    mfa_token: str
+    code: str
+
+
+class MfaTokenResponse(BaseModel):
+    mfa_required: bool = True
+    mfa_token: str
 # Literal["bearer"] significa que el campo solo puede ser bearer; = "bearer" le asigna un valor por defecto si el cliente no envia token_type
