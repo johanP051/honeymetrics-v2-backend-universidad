@@ -29,4 +29,13 @@ class TokenResponse(BaseModel):
     user: UserResponse | None = None
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
 # Literal["bearer"] significa que el campo solo puede ser bearer; = "bearer" le asigna un valor por defecto si el cliente no envia token_type
