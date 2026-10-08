@@ -14,6 +14,10 @@ class User(Base):
     role_id = Column(Integer, ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     must_change_password = Column(Boolean, default=True, nullable=False)
+    reset_token = Column(String(255), unique=True, nullable=True)
+    reset_token_expires = Column(DateTime, nullable=True)
+    totp_secret = Column(String(64), nullable=True)
+    is_mfa_enabled = Column(Boolean, default=False, nullable=False)
     created_at = Column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),

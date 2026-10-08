@@ -45,6 +45,17 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if "jti" in payload:
+        from app.models.revoked_token_model import RevokedToken
+
+        revoked = db.query(RevokedToken).filter(RevokedToken.token_jti == payload["jti"]).first()
+        if revoked:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sesión cerrada. Inicia sesión de nuevo.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     user_id: str = payload["sub"]
     user = db.query(User).filter(User.id == int(user_id)).first()
 
