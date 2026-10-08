@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 from app.main import app
+from app.api.deps import get_current_user
 from app.services.threat_service import ThreatService
 from app.schemas.threat_schema import (
     AttackerIPSchema,
@@ -11,6 +12,13 @@ from app.schemas.threat_schema import (
 )
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def authenticated_threat_requests():
+    app.dependency_overrides[get_current_user] = lambda: object()
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 # ==========================================

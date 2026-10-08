@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.schemas.log_export_schema import (
     LogExportItemResponse,
@@ -31,7 +32,10 @@ router = APIRouter(prefix="/logs", tags=["Logs & Export"])
     status_code=status.HTTP_200_OK,
     summary="Obtener historial persistente de exportaciones de logs",
 )
-def get_logs_history(db: Session = Depends(get_db)) -> List[LogExportItemResponse]:
+def get_logs_history(
+    db: Session = Depends(get_db),
+    _current_user=Depends(get_current_user),
+) -> List[LogExportItemResponse]:
     """
     Retorna la lista de todas las exportaciones registradas en base de datos.
     Si la base de datos está vacía, puebla automáticamente los registros de referencia.
@@ -49,6 +53,7 @@ async def request_log_export(
     payload: LogExportRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    _current_user=Depends(get_current_user),
 ) -> LogExportResponse:
     """
     Registra una solicitud de extracción de logs crudos en Base de Datos.
@@ -113,6 +118,7 @@ async def telegram_webhook(
 def download_log_export(
     export_id: str,
     db: Session = Depends(get_db),
+    _current_user=Depends(get_current_user),
 ):
     """
     Descarga por streaming el archivo JSONL para una exportación en estado 'Listo'.
@@ -154,6 +160,7 @@ def download_log_export(
 def get_report_stats(
     export_id: str,
     db: Session = Depends(get_db),
+    _current_user=Depends(get_current_user),
 ) -> LogReportStatsResponse:
     """
     Retorna métricas agregadas por decoders de Wazuh para esquematizar el reporte técnico.
