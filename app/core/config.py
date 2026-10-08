@@ -1,5 +1,6 @@
+import secrets
 from typing import List, Union
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +12,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     # Security
-    SECRET_KEY: str = "supersecretkey_change_in_production_generate_with_openssl"
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REQUIRE_PASSWORD_CHANGE_ON_FIRST_LOGIN: bool = True
@@ -52,10 +53,29 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_SECRET: str = ""
 
     # Wazuh Indexer (OpenSearch SIEM)
-    WAZUH_INDEXER_URL: str = "https://192.168.32.11:9200"
-    WAZUH_INDEXER_USER: str = "admin"
+    WAZUH_INDEXER_URL: str = ""
+    WAZUH_INDEXER_USER: str = ""
     WAZUH_INDEXER_PASSWORD: str = ""
-    WAZUH_TLS_VERIFY: bool = False
+    WAZUH_TLS_VERIFY: bool = True
+
+    @model_validator(mode="after")
+    def validate_security_configuration(self) -> "Settings":
+        if self.ENVIRONMENT in {"staging", "production"}:
+            required = {
+                "SECRET_KEY": self.SECRET_KEY,
+                "WAZUH_INDEXER_URL": self.WAZUH_INDEXER_URL,
+                "WAZUH_INDEXER_USER": self.WAZUH_INDEXER_USER,
+                "WAZUH_INDEXER_PASSWORD": self.WAZUH_INDEXER_PASSWORD,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing:
+                raise ValueError(
+                    "Configuración insegura: faltan variables requeridas: "
+                    + ", ".join(missing)
+                )
+        elif not self.SECRET_KEY:
+            self.SECRET_KEY = secrets.token_urlsafe(32)
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",
