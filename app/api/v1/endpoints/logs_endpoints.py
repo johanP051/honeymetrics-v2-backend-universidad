@@ -81,8 +81,8 @@ async def telegram_webhook(
     Recibe las notificaciones de Telegram. Si incluye callback_query (clic en Aprobar/Rechazar),
     procesa la autorización, actualiza el estado en Base de Datos y actualiza el mensaje en el chat.
     """
-    if settings.TELEGRAM_WEBHOOK_SECRET and x_telegram_bot_api_secret_token:
-        if x_telegram_bot_api_secret_token != settings.TELEGRAM_WEBHOOK_SECRET:
+    if settings.TELEGRAM_WEBHOOK_SECRET:
+        if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.TELEGRAM_WEBHOOK_SECRET:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Token secreto de webhook inválido.",

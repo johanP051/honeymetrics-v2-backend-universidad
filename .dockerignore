@@ -1,0 +1,1 @@
+# Entornos virtuales\nvenv/\n.venv/\n__pycache__/\n*.pyc\n\n# Secrets\n.env\n.env.*\n\n# Git\n.git/\n.github/
