@@ -7,25 +7,28 @@ Proporciona guardas de autenticación y autorización (RBAC) reutilizables:
 """
 from typing import Optional
 from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import SecurityScopes
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
+from app.core.permissions import get_scopes_for_role
 from app.db.session import get_db
 from app.models.user_model import User
 from app.models.role_model import Role
 
 
 def get_current_user(
+    security_scopes: SecurityScopes = SecurityScopes(),
     authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ) -> User:
     """
     Extrae el Bearer token del header Authorization, lo decodifica y
-    retorna el usuario activo asociado al JWT.
+    retorna el usuario activo asociado al JWT verificando permisos PBAC (scopes).
 
     Lanza:
       - HTTP 401 si no hay token, el token es inválido o el usuario no existe.
-      - HTTP 403 si el usuario está suspendido.
+      - HTTP 403 si el usuario está suspendido o carece de los scopes requeridos.
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -70,6 +73,20 @@ def get_current_user(
             detail="La cuenta de usuario se encuentra suspendida o inactiva.",
         )
 
+    # Verificación de Scopes (PBAC) sin hardcoding
+    if security_scopes.scopes:
+        role_name = user.role.name if getattr(user, "role", None) else None
+        token_scopes = payload.get("scopes") or get_scopes_for_role(role_name)
+
+        if "admin:all" not in token_scopes:
+            for required_scope in security_scopes.scopes:
+                if required_scope not in token_scopes:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Permisos insuficientes: se requiere el scope '{required_scope}'.",
+                        headers={"WWW-Authenticate": f'Bearer scope="{required_scope}"'},
+                    )
+
     return user
 
 
@@ -78,15 +95,22 @@ def require_admin_user(
     db: Session = Depends(get_db),
 ) -> User:
     """
-    Guarda de autorización RBAC: permite el acceso únicamente a usuarios
-    con rol "Administrador". Lanza HTTP 403 si el rol no coincide.
+    Guarda de autorización compatible hacia atrás.
+    Evalúa scopes PBAC ('admin:all') garantizando cero hardcoding.
     """
-    role = db.query(Role).filter(Role.id == current_user.role_id).first()
-    # Acepta 'admin' (seed scripts) y 'Administrador' (panel) sin distinción
-    # de mayúsculas: ambos identifican el rol administrador del sistema.
-    if not role or role.name.strip().lower() not in ("admin", "administrador"):
+    role = None
+    if getattr(current_user, "role_id", None) and db:
+        role = db.query(Role).filter(Role.id == current_user.role_id).first()
+    
+    if not role and getattr(current_user, "role", None):
+        role = current_user.role
+
+    role_name = getattr(role, "name", None) if role else None
+    user_scopes = get_scopes_for_role(role_name)
+
+    if "admin:all" not in user_scopes:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso restringido: Se requieren privilegios de Administrador.",
+            detail="Acceso restringido: Se requieren privilegios de Administrador (admin:all).",
         )
     return current_user

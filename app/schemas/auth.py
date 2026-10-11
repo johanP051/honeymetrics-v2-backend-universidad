@@ -15,8 +15,10 @@ class UserResponse(BaseModel):
     first_names: str
     last_names: str
     role_id: int
+    role_name: str | None = None
     is_active: bool
     must_change_password: bool
+    scopes: list[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -26,6 +28,7 @@ class TokenResponse(BaseModel):
     token_type: Literal["bearer"] = "bearer"
     user: UserResponse | None = None
     mfa_required: bool = False
+    scopes: list[str] = []
 
 
 class ForgotPasswordRequest(BaseModel):

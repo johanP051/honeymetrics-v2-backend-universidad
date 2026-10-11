@@ -15,7 +15,11 @@ def verify_password(password: str, hashed_password: str) -> bool:
     passwd_validation = pwd_context.verify(password, hashed_password)
     return passwd_validation
 
-def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    subject: str,
+    expires_delta: timedelta | None = None,
+    scopes: list[str] | None = None,
+) -> str:
     if expires_delta is not None:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
@@ -25,6 +29,7 @@ def create_access_token(subject: str, expires_delta: timedelta | None = None) ->
         "sub": str(subject),
         "exp": expire,
         "jti": uuid.uuid4().hex,
+        "scopes": scopes or [],
     }
 
     encoded_jwt = jwt.encode(
