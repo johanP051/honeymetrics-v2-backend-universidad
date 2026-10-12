@@ -84,7 +84,20 @@ class EmailService:
             else:
                 logger.warning("RESEND_API_KEY no configurada. Envío de bienvenida en simulación.")
 
-            login_url = f"{settings.FRONTEND_URL}/login"
+            # Blindaje de aislamiento: Evitar enlaces cruzados hacia el frontend del proyecto guía
+            is_external_guide = "honeymetrics-frontend.johan-sebastianposada.workers.dev" in (settings.FRONTEND_URL or "")
+            if settings.FRONTEND_URL and not is_external_guide and not settings.FRONTEND_URL.startswith("http://localhost"):
+                cta_section = f'''
+                    <p style="text-align: center;">
+                        <a href="{settings.FRONTEND_URL}/login" class="button">Iniciar Sesión en HoneyMetrics UDEC</a>
+                    </p>
+                '''
+            else:
+                cta_section = '''
+                    <div style="background-color: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 6px; padding: 14px; margin: 20px 0; text-align: center; font-size: 13px; color: #94a3b8;">
+                        🔒 <em>La interfaz web de HoneyMetrics UDEC se encuentra en proceso de integración académica. Consérvese esta contraseña temporal para el acceso al portal institucional oficial.</em>
+                    </div>
+                '''
 
             html_content = f"""
             <!DOCTYPE html>
@@ -113,9 +126,7 @@ class EmailService:
                     <div class="alert-box">
                         <strong>⚠️ Importante:</strong> Por políticas de seguridad, debes <strong>cambiar tu contraseña</strong> obligatoriamente al realizar tu primer inicio de sesión.
                     </div>
-                    <p style="text-align: center;">
-                        <a href="{login_url}" class="button">Iniciar Sesión</a>
-                    </p>
+                    {cta_section}
                     <div class="footer">
                         <p>HoneyMetrics UDEC &bull; Ingeniería de Software II &bull; Cátedra Universitaria</p>
                     </div>
