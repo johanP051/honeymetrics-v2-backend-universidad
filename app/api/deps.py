@@ -6,8 +6,8 @@ Proporciona guardas de autenticación y autorización (RBAC) reutilizables:
   - require_admin_user: restringe el acceso a usuarios con rol "Administrador".
 """
 from typing import Optional
-from fastapi import Depends, Header, HTTPException, status
-from fastapi.security import SecurityScopes
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, SecurityScopes
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
@@ -16,28 +16,46 @@ from app.db.session import get_db
 from app.models.user_model import User
 from app.models.role_model import Role
 
+bearer_scheme = HTTPBearer(auto_error=False)
+
 
 def get_current_user(
     security_scopes: SecurityScopes = SecurityScopes(),
-    authorization: Optional[str] = Header(default=None),
+    token_bearer: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    request: Request = None,
     db: Session = Depends(get_db),
 ) -> User:
     """
     Extrae el Bearer token del header Authorization, lo decodifica y
     retorna el usuario activo asociado al JWT verificando permisos PBAC (scopes).
 
+    Soporta:
+      - Autenticación Swagger UI (vía esquema nativo Bearer y botón Authorize).
+      - Header 'Authorization: Bearer <token>' estándar.
+      - Fallback flexible si el token se envía sin el prefijo 'Bearer '.
+
     Lanza:
       - HTTP 401 si no hay token, el token es inválido o el usuario no existe.
       - HTTP 403 si el usuario está suspendido o carece de los scopes requeridos.
     """
-    if not authorization or not authorization.startswith("Bearer "):
+    token: Optional[str] = None
+    if token_bearer and token_bearer.credentials:
+        token = token_bearer.credentials
+    elif request:
+        auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+        if auth_header:
+            if auth_header.startswith("Bearer ") or auth_header.startswith("bearer "):
+                token = auth_header.split(" ", 1)[1].strip()
+            else:
+                token = auth_header.strip()
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No autenticado. Token de acceso no proporcionado.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token = authorization.split(" ", 1)[1]
     payload = decode_access_token(token)
 
     if not payload or "sub" not in payload:
