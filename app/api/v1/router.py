@@ -6,6 +6,7 @@ from app.api.v1.endpoints.logs_endpoints import router as logs_router
 from app.api.v1.endpoints.threats_endpoints import router as threats_router
 from app.api.v1.endpoints.blacklist_endpoints import router as blacklist_router
 from app.api.v1.endpoints.admin_endpoints import router as admin_router
+from app.api.v1.endpoints.roles_endpoints import router as roles_router
 
 api_router = APIRouter()
 
@@ -14,6 +15,7 @@ api_router.include_router(logs_router)
 api_router.include_router(threats_router)
 api_router.include_router(blacklist_router)
 api_router.include_router(admin_router)
+api_router.include_router(roles_router, prefix="/roles", tags=["Gestión de Roles"])
 
 
 # main.py ya agrega el prefijo /api/v1 en: app.include_router(api_router, prefix=settings.API_V1_STR)
