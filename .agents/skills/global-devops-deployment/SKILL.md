@@ -123,3 +123,28 @@ graph LR
 - [ ] El contenedor corre bajo el usuario `appuser` (non-root).
 - [ ] Nginx tiene configurados límites de tamaño de subida (`client_max_body_size`) y headers de seguridad (`X-Frame-Options`, `X-Content-Type-Options`).
 - [ ] `CLOUDFLARE_TUNNEL_TOKEN` está protegido en `.env` y nunca subido a GitHub.
+
+---
+
+## 6. Despliegue en Edge Cloudflare (Workers / Pages, Wrangler & MCP)
+
+Para frontends SPA (React + Vite) o microservicios serverless en edge:
+- **Configuración declarativa (`wrangler.jsonc`):**
+  ```jsonc
+  {
+    "name": "honeymetrics-frontend",
+    "compatibility_date": "2026-10-06",
+    "assets": {
+      "directory": "dist",
+      "not_found_handling": "single-page-application"
+    }
+  }
+  ```
+- **Flujo de despliegue:**
+  1. `npm run build` (genera el bundle en `dist/`).
+  2. `npx wrangler deploy` (sincroniza assets y actualiza el trigger en el edge).
+- **Integración con MCP de Cloudflare:**
+  - El servidor remoto oficial MCP (`https://mcp.cloudflare.com/mcp`) permite inspeccionar la infraestructura, gestionar secretos, workers, tunnels y consultar la OpenAPI spec directamente desde el agente usando herramientas (`whoami`, `search`, `execute`, `docs`).
+- **Resiliencia en SPA sin backend público:**
+  - Si el backend está en una red privada o túnel protegido, la SPA en Cloudflare debe poseer mecanismos de fallback / contingencia seguros (mocks offline, derivación de claims) para evitar pantallas de bloqueo como "Acceso Denegado" o fallos 404 no controlados.
+
