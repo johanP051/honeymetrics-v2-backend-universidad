@@ -90,6 +90,6 @@ def test_revoked_token_is_rejected(client, active_user):
     assert denied.status_code == 401
 
 
-def test_logout_without_token_returns_200(client):
+def test_logout_without_token_returns_401(client):
     resp = client.post("/api/v1/auth/logout")
-    assert resp.status_code == 200
+    assert resp.status_code == 401

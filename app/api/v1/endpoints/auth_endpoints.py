@@ -122,12 +122,37 @@ def mfa_verify_login(payload: MfaVerifyLoginRequest, db: Session = Depends(get_d
     )
 
 
-@router.post("/logout")
-def logout(request: Request, db: Session = Depends(get_db)):
-    """Cierra la sesion revocando el JWT actual (port de guia)."""
-    authorization = request.headers.get("Authorization")
-    if authorization and authorization.startswith("Bearer "):
-        revoke_token(db, authorization.split(" ", 1)[1])
+from typing import Optional
+from fastapi.security import HTTPAuthorizationCredentials
+from app.api.deps import bearer_scheme
+from app.models.user_model import User
+
+
+@router.post("/logout", summary="Cerrar sesión y revocar token [AUTH]")
+def logout(
+    _current_user: User = Depends(get_current_user),
+    token_bearer: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Cierra la sesión del usuario revocando el identificador único del JWT (jti).
+    El token queda registrado en la denylist relacional (revoked_tokens)
+    y cualquier intento posterior de reutilización será rechazado con HTTP 401.
+    """
+    token: Optional[str] = None
+    if token_bearer and token_bearer.credentials:
+        token = token_bearer.credentials
+    elif request:
+        auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+        if auth_header:
+            if auth_header.startswith("Bearer ") or auth_header.startswith("bearer "):
+                token = auth_header.split(" ", 1)[1].strip()
+            else:
+                token = auth_header.strip()
+
+    if token:
+        revoke_token(db, token)
     return {"message": "Sesión cerrada exitosamente."}
 
 
