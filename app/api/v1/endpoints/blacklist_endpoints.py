@@ -25,6 +25,11 @@ router = APIRouter(
 
 
 @router.get(
+    "",
+    include_in_schema=False,
+    response_model=List[BlacklistEntryResponse],
+)
+@router.get(
     "/",
     response_model=List[BlacklistEntryResponse],
     summary="Listar todas las IPs en la Blacklist (ordenadas por threat score)",
@@ -40,6 +45,12 @@ def list_blacklist(
     return BlacklistService.get_all(db)
 
 
+@router.post(
+    "",
+    include_in_schema=False,
+    response_model=BlacklistEntryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 @router.post(
     "/",
     response_model=BlacklistEntryResponse,
