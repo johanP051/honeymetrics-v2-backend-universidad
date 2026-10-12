@@ -39,6 +39,7 @@ class UserCreateAdminRequest(BaseModel):
     last_names: str = Field(..., min_length=2)
     role_id: int = Field(..., description="ID del rol a asignar")
     temp_password: str = Field(..., min_length=8, description="Contraseña temporal (el usuario debe cambiarla)")
+    send_email: bool = Field(default=True, description="Indica si se envía el correo de bienvenida con las credenciales")
 
 
 class UserUpdateAdminRequest(BaseModel):

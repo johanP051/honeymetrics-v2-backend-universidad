@@ -29,6 +29,7 @@ from app.services.mfa_service import (
     verify_and_enable_mfa,
     verify_login_mfa,
 )
+from app.core.permissions import get_scopes_for_role
 from app.api.deps import get_current_user
 from fastapi import Request
 
@@ -77,12 +78,19 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
             mfa_token=mfa_result["mfa_token"],
         )
 
-    token = create_access_token(str(user.id))
+    role_name = user.role.name if getattr(user, "role", None) else None
+    user_scopes = get_scopes_for_role(role_name)
+    token = create_access_token(str(user.id), scopes=user_scopes)
+
+    user_response = UserResponse.model_validate(user)
+    user_response.role_name = role_name
+    user_response.scopes = user_scopes
 
     return TokenResponse(
         access_token=token,
         token_type="bearer",
-        user=UserResponse.model_validate(user),
+        user=user_response,
+        scopes=user_scopes,
     )
 
 

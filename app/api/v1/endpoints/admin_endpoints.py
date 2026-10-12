@@ -5,12 +5,13 @@ Todos los endpoints requieren rol Administrador.
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin_user
 from app.db.session import get_db
 from app.models.user_model import User
+from app.services.email_service import EmailService
 from app.services.admin_service import (
     AdminService,
     UserListItemResponse,
@@ -51,6 +52,7 @@ def list_users(
 )
 def create_user(
     payload: UserCreateAdminRequest,
+    background_tasks: BackgroundTasks,
     current_admin: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> UserListItemResponse:
@@ -59,7 +61,15 @@ def create_user(
     El usuario deberá cambiarla en su primer inicio de sesión.
     Requiere rol Administrador.
     """
-    return AdminService.create_user(payload, db)
+    created_user = AdminService.create_user(payload, db)
+    if payload.send_email:
+        background_tasks.add_task(
+            EmailService.send_welcome_email,
+            email=str(payload.email),
+            temp_password=payload.temp_password,
+        )
+    return created_user
+
 
 
 @router.put(

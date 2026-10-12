@@ -24,6 +24,22 @@ docs/
 
 ---
 
+
+## 🏛️ Diagrama de Flujo y Arquitectura N-Capas
+
+```mermaid
+graph TD
+    Client["Cliente (React SPA / Swagger)"] -->|"HTTP JSON"| Controller["1. Controllers (app/api/v1/endpoints/)\nThin Controller (<15 líneas)\nEnruta HTTP y códigos de estado (200, 401)"]
+    
+    Controller <-->|"Valida tipos y filtra datos"| DTO["2. DTOs / Schemas (app/schemas/)\nContratos inmutables Pydantic v2\n(LoginRequest, TokenResponse, UserResponse)"]
+    
+    Controller -->|"Invoca método"| Service["3. Services (app/services/)\nLógica pura de negocio y orquestación\n(authenticate_user)"]
+    
+    Service -->|"Unit of Work / Sesión"| DB_Layer["4. Persistencia (app/db/ y app/models/)\nModelos SQLAlchemy (User, Role)\nSesiones y migraciones con Alembic"]
+    
+    DB_Layer -->|"TCP"| Postgres[("PostgreSQL 16")]
+```
+
 ## 🧭 Mapa Rápido de Navegación
 
 | Documento | Temática Principal | ¿A quién le sirve? | Enlace Directo |
