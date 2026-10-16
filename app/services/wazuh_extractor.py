@@ -122,6 +122,45 @@ class WazuhExtractor:
         return 0
 
     @classmethod
+    async def count_events_for_preset(cls, preset: str) -> Optional[int]:
+        """
+        Consulta la cantidad de eventos registrados en Wazuh para un preset temporal ('24h', '7d', '30d', '90d').
+        """
+        if not cls.is_configured():
+            return None
+
+        preset_mapping = {
+            "24h": "now-24h",
+            "7d": "now-7d",
+            "30d": "now-30d",
+            "90d": "now-90d",
+        }
+        preset_expr = preset_mapping.get(preset)
+        if not preset_expr:
+            return None
+
+        url = f"{settings.WAZUH_INDEXER_URL}/wazuh-alerts-*/_count"
+        auth = (settings.WAZUH_INDEXER_USER, settings.WAZUH_INDEXER_PASSWORD)
+        query = {
+            "query": {
+                "range": {
+                    "@timestamp": {
+                        "gte": preset_expr
+                    }
+                }
+            }
+        }
+
+        try:
+            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=15.0) as client:
+                response = await client.post(url, auth=auth, json=query)
+                if response.status_code == 200:
+                    return response.json().get("count")
+        except Exception as e:
+            logger.warning("No se pudo conectar a Wazuh Indexer para contar preset %s: %s", preset, str(e))
+        return None
+
+    @classmethod
     async def extract_day_to_jsonl(
         cls,
         target_date: date,

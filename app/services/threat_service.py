@@ -259,6 +259,14 @@ class ThreatService:
             peak_hour = "11:00 - 12:00 UTC"
             filtered_attackers = all_attackers
 
+        if wazuh_online and range_preset in ("24h", "7d", "30d", "90d"):
+            try:
+                dynamic_count = await WazuhExtractor.count_events_for_preset(range_preset)
+                if dynamic_count is not None:
+                    total_events = dynamic_count
+            except Exception:
+                pass
+
         return ThreatSummarySchema(
             total_analyzed_events=total_events,
             unique_attacker_ips=unique_ips,
