@@ -1,3 +1,4 @@
+import hmac
 from typing import List
 from fastapi import (
     APIRouter,
@@ -89,12 +90,19 @@ async def telegram_webhook(
     Recibe las notificaciones de Telegram. Si incluye callback_query (clic en Aprobar/Rechazar),
     procesa la autorización, actualiza el estado en Base de Datos y actualiza el mensaje en el chat.
     """
-    if settings.TELEGRAM_WEBHOOK_SECRET:
-        if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.TELEGRAM_WEBHOOK_SECRET:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Token secreto de webhook inválido.",
-            )
+    if not settings.TELEGRAM_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook de Telegram no configurado en el servidor.",
+        )
+
+    if not x_telegram_bot_api_secret_token or not hmac.compare_digest(
+        x_telegram_bot_api_secret_token, settings.TELEGRAM_WEBHOOK_SECRET
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Token secreto de webhook inválido.",
+        )
 
     body = await request.json()
 
