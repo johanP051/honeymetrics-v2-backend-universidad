@@ -97,3 +97,45 @@ def test_require_admin_rejects_missing_role():
         require_admin_user(current_user=MagicMock(), db=db)
 
     assert exc_info.value.status_code == 403
+
+
+def test_email_templates_contain_logo_and_no_reply_disclaimer():
+    """Verifica que las plantillas de correo incluyan el logo circular oficial y el aviso de no responder."""
+    from unittest.mock import patch
+    from app.services.email_service import EmailService
+
+    with patch("app.core.config.settings.RESEND_API_KEY", "re_test_key_123"):
+        with patch("resend.Emails.send") as mock_send:
+            mock_send.return_value = {"id": "mock_id"}
+
+            # Plantilla recuperación de contraseña
+            EmailService.send_password_reset_email("investigador@ucundinamarca.edu.co", "sample_reset_token")
+            assert mock_send.call_count == 1
+            call_params_reset = mock_send.call_args[0][0]
+            html_reset = call_params_reset["html"]
+            assert "HoneyMetrics_logo_circled" in html_reset
+            assert "no respondas a este mensaje" in html_reset
+
+            mock_send.reset_mock()
+
+            # Plantilla bienvenida de usuario
+            EmailService.send_welcome_email("nuevo@ucundinamarca.edu.co", "TemporalKey*123")
+            assert mock_send.call_count == 1
+            call_params_welcome = mock_send.call_args[0][0]
+            html_welcome = call_params_welcome["html"]
+            assert "HoneyMetrics_logo_circled" in html_welcome
+            assert "no respondas a este mensaje" in html_welcome
+
+
+def test_security_headers_present():
+    """Verifica que el middleware HTTP inyecte cabeceras de seguridad defensivas en todas las respuestas."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.get("/")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert "max-age=31536000; includeSubDomains" in response.headers["strict-transport-security"]
+
