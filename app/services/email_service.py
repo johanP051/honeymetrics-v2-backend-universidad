@@ -5,12 +5,31 @@ Sin RESEND_API_KEY -> simulación con log (no rompe flujo, útil CI/profe).
 """
 
 import logging
+import os
+from typing import Any, Dict, List
 
 import resend
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "images", "logo_email.png")
+
+
+def _get_logo_attachments() -> List[Dict[str, Any]]:
+    if os.path.exists(_LOGO_PATH):
+        try:
+            with open(_LOGO_PATH, "rb") as f:
+                content = list(f.read())
+            return [{
+                "filename": "HoneyMetrics_logo_circled.png",
+                "content": content,
+                "content_id": "honeymetrics_logo"
+            }]
+        except Exception as e:
+            logger.warning(f"No se pudo cargar el adjunto del logo para el correo: {e}")
+    return []
 
 
 class EmailService:
@@ -41,7 +60,7 @@ class EmailService:
             <body>
                 <div class="card">
                     <div style="text-align: center; margin-bottom: 24px;">
-                        <img src="https://honeymetrics-frontend.johan-sebastianposada.workers.dev/assets/HoneyMetrics_logo_circled-CKMXzEJT.png" alt="HoneyMetrics Logo" width="72" height="72" style="display: inline-block; border-radius: 50%; border: 2px solid #d4af37;" />
+                        <img src="cid:honeymetrics_logo" alt="HoneyMetrics_logo_circled" width="72" height="72" style="display: inline-block; border-radius: 50%; border: 2px solid #d4af37;" />
                     </div>
                     <h1 class="title">Recuperación de Acceso — HoneyMetrics UDEC</h1>
                     <p>Hola,</p>
@@ -69,6 +88,10 @@ class EmailService:
                 "subject": "[UDEC] Recuperación de Acceso — HoneyMetrics",
                 "html": html_content,
             }
+            attachments = _get_logo_attachments()
+            if attachments:
+                params["attachments"] = attachments
+
 
             if settings.RESEND_API_KEY:
                 response = resend.Emails.send(params)
@@ -123,7 +146,7 @@ class EmailService:
             <body>
                 <div class="card">
                     <div style="text-align: center; margin-bottom: 24px;">
-                        <img src="https://honeymetrics-frontend.johan-sebastianposada.workers.dev/assets/HoneyMetrics_logo_circled-CKMXzEJT.png" alt="HoneyMetrics Logo" width="72" height="72" style="display: inline-block; border-radius: 50%; border: 2px solid #d4af37;" />
+                        <img src="cid:honeymetrics_logo" alt="HoneyMetrics_logo_circled" width="72" height="72" style="display: inline-block; border-radius: 50%; border: 2px solid #d4af37;" />
                     </div>
                     <h1 class="title">Bienvenido a HoneyMetrics UDEC</h1>
                     <p>Hola,</p>
@@ -153,6 +176,10 @@ class EmailService:
                 "subject": "[UDEC] Credenciales de Acceso — HoneyMetrics",
                 "html": html_content,
             }
+            attachments = _get_logo_attachments()
+            if attachments:
+                params["attachments"] = attachments
+
 
             if settings.RESEND_API_KEY:
                 response = resend.Emails.send(params)
