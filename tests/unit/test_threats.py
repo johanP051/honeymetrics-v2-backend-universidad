@@ -11,13 +11,16 @@ from app.schemas.threat_schema import (
     ThreatSummarySchema,
 )
 
+from unittest.mock import patch
+
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def authenticated_threat_requests():
     app.dependency_overrides[get_current_user] = lambda: object()
-    yield
+    with patch("app.services.wazuh_extractor.WazuhExtractor.check_connection", return_value=False):
+        yield
     app.dependency_overrides.pop(get_current_user, None)
 
 
@@ -159,3 +162,36 @@ def test_api_botnets_endpoint():
     assert isinstance(data, list)
     assert len(data) > 0
     assert "/24" in data[0]["subnet"]
+
+
+@pytest.mark.anyio
+async def test_wazuh_extractor_count_events_for_preset():
+    """Verifica que WazuhExtractor.count_events_for_preset consulte OpenSearch con query range."""
+    from unittest.mock import patch, MagicMock
+    from app.services.wazuh_extractor import WazuhExtractor
+
+    with patch.object(WazuhExtractor, "is_configured", return_value=True):
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"count": 42000}
+            mock_post.return_value = mock_resp
+
+            count = await WazuhExtractor.count_events_for_preset("7d")
+            assert count == 42000
+            mock_post.assert_called_once()
+            args, kwargs = mock_post.call_args
+            assert "now-7d" in str(kwargs.get("json"))
+
+
+@pytest.mark.anyio
+async def test_threat_summary_dynamic_wazuh_count_when_online():
+    """Verifica que ThreatService actualice total_events dinámicamente si Wazuh está online."""
+    from unittest.mock import patch
+    from app.services.wazuh_extractor import WazuhExtractor
+
+    with patch.object(WazuhExtractor, "check_connection", return_value=True):
+        with patch.object(WazuhExtractor, "count_events_for_preset", return_value=35000):
+            summary = await ThreatService.get_threat_summary(range_preset="7d")
+            assert summary.total_analyzed_events == 35000
+

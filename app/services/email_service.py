@@ -5,12 +5,31 @@ Sin RESEND_API_KEY -> simulación con log (no rompe flujo, útil CI/profe).
 """
 
 import logging
+import os
+from typing import Any, Dict, List
 
 import resend
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "images", "logo_email.png")
+
+
+def _get_logo_attachments() -> List[Dict[str, Any]]:
+    if os.path.exists(_LOGO_PATH):
+        try:
+            with open(_LOGO_PATH, "rb") as f:
+                content = list(f.read())
+            return [{
+                "filename": "HoneyMetrics_logo_circled.png",
+                "content": content,
+                "content_id": "honeymetrics_logo"
+            }]
+        except Exception as e:
+            logger.warning(f"No se pudo cargar el adjunto del logo para el correo: {e}")
+    return []
 
 
 class EmailService:
@@ -40,6 +59,9 @@ class EmailService:
             </head>
             <body>
                 <div class="card">
+                    <div style="text-align: center; margin-bottom: 24px;">
+                        <img src="cid:honeymetrics_logo" alt="HoneyMetrics_logo_circled" width="72" height="72" style="display: inline-block; border-radius: 50%; border: 2px solid #d4af37;" />
+                    </div>
                     <h1 class="title">Recuperación de Acceso — HoneyMetrics UDEC</h1>
                     <p>Hola,</p>
                     <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta académica en la plataforma HoneyMetrics UDEC.</p>
@@ -49,6 +71,9 @@ class EmailService:
                     </p>
                     <p>Este enlace tiene una vigencia estricta de <strong>1 hora</strong> por motivos de seguridad.</p>
                     <p>Si no realizaste esta solicitud, puedes ignorar este mensaje de forma segura. Tu contraseña actual no será modificada.</p>
+                    <div style="margin-top: 24px; padding: 12px; background-color: rgba(255, 255, 255, 0.03); border: 1px dashed #475569; border-radius: 6px; font-size: 11px; color: #94a3b8; text-align: center;">
+                        Este es un correo electrónico generado automáticamente por la plataforma HoneyMetrics. Por favor, no respondas a este mensaje ya que esta casilla no es monitoreada.
+                    </div>
                     <div class="footer">
                         <p>HoneyMetrics UDEC &bull; Ingeniería de Software II</p>
                     </div>
@@ -63,6 +88,10 @@ class EmailService:
                 "subject": "[UDEC] Recuperación de Acceso — HoneyMetrics",
                 "html": html_content,
             }
+            attachments = _get_logo_attachments()
+            if attachments:
+                params["attachments"] = attachments
+
 
             if settings.RESEND_API_KEY:
                 response = resend.Emails.send(params)
@@ -116,6 +145,9 @@ class EmailService:
             </head>
             <body>
                 <div class="card">
+                    <div style="text-align: center; margin-bottom: 24px;">
+                        <img src="cid:honeymetrics_logo" alt="HoneyMetrics_logo_circled" width="72" height="72" style="display: inline-block; border-radius: 50%; border: 2px solid #d4af37;" />
+                    </div>
                     <h1 class="title">Bienvenido a HoneyMetrics UDEC</h1>
                     <p>Hola,</p>
                     <p>Se ha creado exitosamente tu cuenta de acceso a la plataforma académica de Cyber Threat Intelligence <strong>HoneyMetrics UDEC</strong>.</p>
@@ -127,6 +159,9 @@ class EmailService:
                         <strong>⚠️ Importante:</strong> Por políticas de seguridad, debes <strong>cambiar tu contraseña</strong> obligatoriamente al realizar tu primer inicio de sesión.
                     </div>
                     {cta_section}
+                    <div style="margin-top: 24px; padding: 12px; background-color: rgba(255, 255, 255, 0.03); border: 1px dashed #475569; border-radius: 6px; font-size: 11px; color: #94a3b8; text-align: center;">
+                        Este es un correo electrónico generado automáticamente por la plataforma HoneyMetrics. Por favor, no respondas a este mensaje ya que esta casilla no es monitoreada.
+                    </div>
                     <div class="footer">
                         <p>HoneyMetrics UDEC &bull; Ingeniería de Software II &bull; Cátedra Universitaria</p>
                     </div>
@@ -141,6 +176,10 @@ class EmailService:
                 "subject": "[UDEC] Credenciales de Acceso — HoneyMetrics",
                 "html": html_content,
             }
+            attachments = _get_logo_attachments()
+            if attachments:
+                params["attachments"] = attachments
+
 
             if settings.RESEND_API_KEY:
                 response = resend.Emails.send(params)

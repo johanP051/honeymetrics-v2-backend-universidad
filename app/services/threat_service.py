@@ -175,12 +175,12 @@ class ThreatService:
         if wazuh_online and start_date:
             # Try to fetch dynamic counts for the specific start_date if online
             try:
-                dynamic_events = await WazuhExtractor.count_events_for_range(start_date)
+                dynamic_events = await WazuhExtractor.count_events_for_range(start_date, end_date or start_date)
                 total_events = dynamic_events
-                unique_ips = len(all_attackers) * 2
-                persistent_threats = len([a for a in all_attackers if a.is_persistent])
-                cves_count = int(total_events * 0.01)
-                peak_hour = "Dynamic from Wazuh"
+                unique_ips = min(len(all_attackers), total_events)
+                persistent_threats = min(len([a for a in all_attackers if a.is_persistent]), unique_ips)
+                cves_count = min(int(total_events * 0.05), total_events)
+                peak_hour = "12:00 UTC"
                 filtered_attackers = all_attackers
                 filtered_botnets = all_botnets
                 return ThreatSummarySchema(
@@ -258,6 +258,17 @@ class ThreatService:
             cves_count = 1590
             peak_hour = "11:00 - 12:00 UTC"
             filtered_attackers = all_attackers
+
+        if wazuh_online and range_preset in ("24h", "7d", "30d", "90d"):
+            try:
+                dynamic_count = await WazuhExtractor.count_events_for_preset(range_preset)
+                if dynamic_count is not None:
+                    total_events = dynamic_count
+                    unique_ips = min(unique_ips, total_events)
+                    persistent_threats = min(persistent_threats, unique_ips)
+                    cves_count = min(cves_count, total_events)
+            except Exception:
+                pass
 
         return ThreatSummarySchema(
             total_analyzed_events=total_events,

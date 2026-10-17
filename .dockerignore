@@ -1,4 +1,23 @@
-# Entornos virtuales\nvenv/\n.venv/\n__pycache__/\n*.pyc\n\n# Secrets\n.env\n.env.*\n\n# Git\n.git/\n.github/
-
+# Entornos virtuales
+venv/
+.venv/
 .honey-back-venv/
+__pycache__/
+*.pyc
+.pytest_cache/
 
+# Secretos y configuración local
+.env
+.env.*
+!.env.example
+
+# Bases de datos y reportes locales
+*.db
+*.sqlite3
+reports/
+context/
+.engram/
+
+# Git
+.git/
+.github/
