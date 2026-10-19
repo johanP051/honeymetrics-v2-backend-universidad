@@ -129,12 +129,18 @@ def test_api_summary_default():
 
 
 def test_api_summary_with_preset():
-    """Verifica GET /api/v1/threats/summary?range=24h."""
+    """Verifica GET /api/v1/threats/summary?range=24h y con range_preset=24h."""
     response = client.get("/api/v1/threats/summary?range=24h")
     assert response.status_code == 200
     data = response.json()
     assert data["total_analyzed_events"] == 1920
     assert data["peak_hour_utc"] == "14:00 - 15:00 UTC"
+
+    response2 = client.get("/api/v1/threats/summary?range_preset=24h")
+    assert response2.status_code == 200
+    data2 = response2.json()
+    assert data2["total_analyzed_events"] == 1920
+    assert data2["peak_hour_utc"] == "14:00 - 15:00 UTC"
 
 
 def test_api_summary_inverted_dates_returns_400():
