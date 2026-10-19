@@ -25,6 +25,8 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5173",
+        "https://honeymetrics-v2-frontend.johan-sebastianposada.workers.dev",
+        "https://honeymetrics-frontend.johan-sebastianposada.workers.dev",
     ]
 
     # Correo transaccional Resend (PB-HM-06.1, ente UDEC distinto de guía)
