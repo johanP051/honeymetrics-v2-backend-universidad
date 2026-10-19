@@ -165,7 +165,7 @@ def download_log_export(
     status_code=status.HTTP_200_OK,
     summary="Obtener estadísticas y agregaciones de decoders para reporte PDF",
 )
-def get_report_stats(
+async def get_report_stats(
     export_id: str,
     db: Session = Depends(get_db),
     _current_user=Depends(get_current_user),
@@ -173,10 +173,11 @@ def get_report_stats(
     """
     Retorna métricas agregadas por decoders de Wazuh para esquematizar el reporte técnico.
     """
-    stats = LogsService.get_report_stats(export_id=export_id, db=db)
+    stats = await LogsService.get_report_stats(export_id=export_id, db=db)
     if not stats:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"La exportación '{export_id}' no existe.",
         )
     return stats
+

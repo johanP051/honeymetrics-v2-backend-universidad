@@ -84,3 +84,61 @@ def test_telegram_webhook_valid_token_returns_200():
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
+
+def test_get_report_stats_success():
+    """Verifica que /report-stats/{export_id} retorne las agregaciones esperadas."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.core.security import create_access_token
+    from app.db.base import Base
+    from app.db.session import get_db
+    from app.models.log_export_model import LogExport
+    from app.models import Role, User
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from sqlalchemy.pool import StaticPool
+    from datetime import date
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(bind=engine)
+
+    def override_get_db():
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    try:
+        with Session(engine) as session:
+            admin_role = Role(id=1, name="admin", description="Administrador")
+            session.add(admin_role)
+            user = User(id=1, email="test@example.com", first_names="Test", last_names="User", hashed_password="hash", is_active=True, role_id=1)
+            session.add(user)
+            exp = LogExport(
+                id="EXP-1001",
+                start_date=date(2026, 8, 1),
+                end_date=date(2026, 8, 2),
+                date_range="2026-08-01 / 2026-08-02",
+                count=100,
+                status="Listo",
+            )
+            session.add(exp)
+            session.commit()
+
+        token = create_access_token(1)
+        client = TestClient(app)
+        res = client.get("/api/v1/logs/report-stats/EXP-1001", headers={"Authorization": f"Bearer {token}"})
+        assert res.status_code == 200
+        data = res.json()
+        assert "labels" in data
+        assert "values" in data
+        assert data["total_logs"] == 100
+
+        # Test 404 para ID inexistente
+        res_404 = client.get("/api/v1/logs/report-stats/EXP-NONEXISTENT", headers={"Authorization": f"Bearer {token}"})
+        assert res_404.status_code == 404
+        assert "no existe" in res_404.json()["detail"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
