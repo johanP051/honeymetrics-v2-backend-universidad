@@ -80,7 +80,7 @@ class WazuhExtractor:
 
                         try:
                             ip_obj = ipaddress.ip_address(clean_ip)
-                            if clean_ip == "0.0.0.0" or ip_obj.is_unspecified:
+                            if ip_obj.is_unspecified or ip_obj.is_loopback:
                                 continue
                             clean_ip = str(ip_obj)
                         except ValueError:
@@ -129,7 +129,7 @@ class WazuhExtractor:
         }
 
         try:
-            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=15.0) as client:
+            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=4.0) as client:
                 response = await client.post(url, auth=auth, json=query)
                 if response.status_code == 200:
                     return int(response.json().get("count", 0))

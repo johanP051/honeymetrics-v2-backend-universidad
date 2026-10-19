@@ -16,14 +16,16 @@ router = APIRouter(prefix="/threats", tags=["Threat Intelligence"])
 
 @router.get("/summary", response_model=ThreatSummarySchema, summary="Resumen global de CTI con filtrado temporal")
 async def get_threat_summary(
-    range: Optional[Literal["24h", "7d", "30d", "90d"]] = Query(None, description="Preset temporal: 24h, 7d, 30d, 90d"),
+    range_preset: Optional[Literal["24h", "7d", "30d", "90d"]] = Query(None, description="Preset temporal: 24h, 7d, 30d, 90d"),
+    range: Optional[Literal["24h", "7d", "30d", "90d"]] = Query(None, description="Alias para preset temporal (24h, 7d, 30d, 90d)"),
     start_date: Optional[date] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
     end_date: Optional[date] = Query(None, description="Fecha de fin (YYYY-MM-DD)"),
     _current_user=Depends(get_current_user),
 ) -> ThreatSummarySchema:
     """Retorna las métricas consolidadas de amenazas con filtrado temporal."""
+    effective_preset = range_preset or range
     return await ThreatService.get_threat_summary(
-        range_preset=range,
+        range_preset=effective_preset,
         start_date=start_date,
         end_date=end_date,
     )
