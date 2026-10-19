@@ -129,7 +129,7 @@ class WazuhExtractor:
         }
 
         try:
-            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=15.0) as client:
+            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=4.0) as client:
                 response = await client.post(url, auth=auth, json=query)
                 if response.status_code == 200:
                     return int(response.json().get("count", 0))

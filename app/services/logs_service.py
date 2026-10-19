@@ -86,7 +86,16 @@ class LogsService:
 
     @classmethod
     def _format_datetime(cls, dt: datetime) -> str:
-        """Formatea un datetime para presentación amigable y consistente."""
+        """Formatea un datetime para presentación amigable y consistente en hora de Colombia (UTC-5)."""
+        if dt is None:
+            return ""
+        # Localización a hora de Colombia (America/Bogota, UTC-5)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        
+        colombia_tz = timezone(timedelta(hours=-5))
+        dt_col = dt.astimezone(colombia_tz)
+
         meses = [
             "enero",
             "febrero",
@@ -101,10 +110,10 @@ class LogsService:
             "noviembre",
             "diciembre",
         ]
-        mes = meses[dt.month - 1]
-        hora_12 = dt.hour % 12 or 12
-        ampm = "a.m." if dt.hour < 12 else "p.m."
-        return f"{dt.day} de {mes} de {dt.year}, {hora_12}:{dt.minute:02d} {ampm}"
+        mes = meses[dt_col.month - 1]
+        hora_12 = dt_col.hour % 12 or 12
+        ampm = "a.m." if dt_col.hour < 12 else "p.m."
+        return f"{dt_col.day} de {mes} de {dt_col.year}, {hora_12}:{dt_col.minute:02d} {ampm}"
 
     @classmethod
     def seed_initial_data_if_needed(cls, db: Session):
@@ -169,17 +178,23 @@ class LogsService:
                 db.add(export_record)
                 db.commit()
 
-            # Notificación a Telegram (Fail-safe: si falla la red, no aborta la transacción)
-            try:
-                sent = await TelegramService.send_approval_request(
+            # Notificación a Telegram (Fail-safe en background para respuesta inmediata al cliente)
+            if background_tasks:
+                background_tasks.add_task(
+                    TelegramService.send_approval_request,
                     export_id=export_id,
                     count=count,
                     date_range=date_range,
                 )
-                if not sent:
-                    logger.warning("No se pudo notificar a Telegram para export %s", export_id)
-            except Exception as e:
-                logger.error("Error al notificar a Telegram: %s", str(e))
+            else:
+                try:
+                    await TelegramService.send_approval_request(
+                        export_id=export_id,
+                        count=count,
+                        date_range=date_range,
+                    )
+                except Exception as e:
+                    logger.error("Error al notificar a Telegram: %s", str(e))
 
             return LogExportResponse(
                 id=export_id,
