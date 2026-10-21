@@ -21,7 +21,7 @@ jobs:
               case "$HEAD" in
                 feat/*|fix/*|security/*|test/*|docs/*|chore/*) ;;
                 *) echo "PR a develop debe venir de una rama auxiliar: $HEAD"; exit 1 ;;
-              esac ;;
+              esac
               ;;
             QA) [ "$HEAD" = "develop" ] || { echo "PR a QA debe venir de develop"; exit 1; } ;;
             main) [ "$HEAD" = "QA" ] || { echo "PR a main debe venir de QA"; exit 1; } ;;
