@@ -1,0 +1,30 @@
+name: Branch and PR policy
+
+on:
+  pull_request:
+    branches: [develop, QA, main]
+  workflow_dispatch:
+
+jobs:
+  validate-flow:
+    name: Validate academic PR direction
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate allowed branch flow
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          set -eu
+          case "$BASE" in
+            develop)
+              case "$HEAD" in
+                feat/*|fix/*|security/*|test/*|docs/*|chore/*) ;;
+                *) echo "PR a develop debe venir de una rama auxiliar: $HEAD"; exit 1 ;;
+              esac ;;
+              ;;
+            QA) [ "$HEAD" = "develop" ] || { echo "PR a QA debe venir de develop"; exit 1; } ;;
+            main) [ "$HEAD" = "QA" ] || { echo "PR a main debe venir de QA"; exit 1; } ;;
+            *) echo "Base no soportada: $BASE"; exit 1 ;;
+          esac
+          echo "Flujo académico válido: $HEAD -> $BASE"
