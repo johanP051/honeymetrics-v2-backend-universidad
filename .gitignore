@@ -46,3 +46,7 @@ Thumbs.db
 # Guias personales de prueba (no versionar: solo uso local del desarrollador)
 docs/guia_endpoints_sprint3.md
 .agents/rules/anti_hardcoded_rbac.md
+
+# Contextos locales para IA (no versionar ni publicar)
+context/contexto_*.txt
+context/generate_context*.py
