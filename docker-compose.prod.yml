@@ -15,7 +15,11 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: hm_v2_api_cloudflared
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    environment:
+      - TUNNEL_TOKEN_FILE=/etc/cloudflared/token
+    volumes:
+      - ./.cloudflared_token:/etc/cloudflared/token:ro
+    command: tunnel --no-autoupdate --protocol http2 run
     profiles:
       - tunnel
     networks:
