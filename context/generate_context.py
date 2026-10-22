@@ -8,6 +8,7 @@ import hashlib
 import os
 import re
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 EXTENSIONS = {
@@ -88,13 +89,21 @@ def collect(root: Path, max_file_chars: int) -> list[Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--root", type=Path, help="Repository root; inferred from this script when omitted.")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--manifest", action="store_true", help="Also write a sidecar checksum manifest.")
+    parser.add_argument("--overwrite", action="store_true", help="Allow replacing an explicitly selected output.")
     parser.add_argument("--max-chars", type=int, default=900_000)
     parser.add_argument("--max-file-chars", type=int, default=80_000)
     args = parser.parse_args()
-    root = args.root.resolve()
-    output = (args.output or Path("/tmp") / "honeymetrics_context" / root.name / f"contexto_{root.name}.txt").resolve()
+    root = (args.root or Path(__file__).resolve().parents[1]).resolve()
+    if args.output:
+        output = args.output.resolve()
+        if output.exists() and not args.overwrite:
+            raise SystemExit(f"Output already exists: {output}. Use --overwrite only when intentional.")
+    else:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        output = (Path("/tmp") / "honeymetrics_context" / root.name / f"contexto_{root.name}_{stamp}.txt").resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     chunks = [
         "# HONEYMETRICS — CONTEXTO SANITIZADO PARA AUDITORÍA",
@@ -120,16 +129,17 @@ def main() -> int:
         included.append(relative)
         redactions += count
     content = "".join(chunks)
-    content += f"\n{'=' * 80}\n## MANIFEST\n{'=' * 80}\n"
+    content += f"\n{'=' * 80}\n## GENERATION SUMMARY\n{'=' * 80}\n"
     content += f"Included files: {len(included)}\nSkipped by total budget: {len(skipped)}\nRedaction replacements: {redactions}\nOutput characters: {len(content)}\n"
     if skipped:
         content += "Skipped paths:\n" + "\n".join(f"- {item}" for item in skipped[:100]) + "\n"
     output.write_text(content, encoding="utf-8")
-    digest = hashlib.sha256(content.encode()).hexdigest()
-    manifest = output.with_suffix(".manifest.txt")
-    manifest.write_text(f"output={output}\nsha256={digest}\nchars={len(content)}\nincluded={len(included)}\nskipped_by_budget={len(skipped)}\nredactions={redactions}\n", encoding="utf-8")
     print(f"Generated {output} ({len(content):,} chars, {len(included)} files)")
-    print(f"Manifest: {manifest}")
+    if args.manifest:
+        digest = hashlib.sha256(content.encode()).hexdigest()
+        manifest = output.with_suffix(".manifest.txt")
+        manifest.write_text(f"output={output}\nsha256={digest}\nchars={len(content)}\nincluded={len(included)}\nskipped_by_budget={len(skipped)}\nredactions={redactions}\n", encoding="utf-8")
+        print(f"Manifest: {manifest}")
     return 0
 
 if __name__ == "__main__":
