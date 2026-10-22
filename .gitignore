@@ -50,3 +50,9 @@ docs/guia_endpoints_sprint3.md
 # Contextos locales para IA (no versionar ni publicar)
 context/contexto_*.txt
 context/generate_context*.py
+!context/generate_context.py
+context/__pycache__/
+.engram/
+
+# Cloudflare Tunnel Secret File
+.cloudflared_token
