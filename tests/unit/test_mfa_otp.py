@@ -173,11 +173,13 @@ def test_mfa_disable_stops_requiring_otp(client, active_user, db_session):
     token = _login(client)["access_token"]
     setup = client.post("/api/v1/auth/mfa/setup", headers=_auth(token)).json()
     code = pyotp.TOTP(setup["secret"]).now()
-    client.post("/api/v1/auth/mfa/verify", headers=_auth(token), json={"code": code})
+    resp_verify = client.post("/api/v1/auth/mfa/verify", headers=_auth(token), json={"code": code})
     db_session.refresh(active_user)
     assert active_user.is_mfa_enabled is True
 
-    disable = client.post("/api/v1/auth/mfa/disable", headers=_auth(token))
+    # Utiliza el token renovado con el nuevo auth_version emitido al activar 2FA
+    active_token = resp_verify.json().get("access_token", token)
+    disable = client.post("/api/v1/auth/mfa/disable", headers=_auth(active_token))
     assert disable.status_code == 200
     db_session.refresh(active_user)
     assert active_user.is_mfa_enabled is False

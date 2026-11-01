@@ -175,8 +175,10 @@ async def test_wazuh_extractor_count_events_for_preset():
     """Verifica que WazuhExtractor.count_events_for_preset consulte OpenSearch con query range."""
     from unittest.mock import patch, MagicMock
     from app.services.wazuh_extractor import WazuhExtractor
+    from app.services.wazuh_stats import WazuhStatsService
 
-    with patch.object(WazuhExtractor, "is_configured", return_value=True):
+    with patch.object(WazuhStatsService, "_is_configured", return_value=True), \
+         patch.object(WazuhExtractor, "is_configured", return_value=True):
         with patch("httpx.AsyncClient.post") as mock_post:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
