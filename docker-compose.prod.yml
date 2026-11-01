@@ -3,6 +3,8 @@ services:
     restart: unless-stopped
     expose:
       - "5432"
+    ports:
+      - "127.0.0.1:5433:5432"
     command: postgres -c shared_buffers=64MB -c work_mem=4MB -c max_connections=30
 
   api:

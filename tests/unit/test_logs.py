@@ -112,7 +112,7 @@ def test_get_report_stats_success():
         with Session(engine) as session:
             admin_role = Role(id=1, name="admin", description="Administrador")
             session.add(admin_role)
-            user = User(id=1, email="test@example.com", first_names="Test", last_names="User", hashed_password="hash", is_active=True, role_id=1)
+            user = User(id=1, email="test@example.com", first_names="Test", last_names="User", hashed_password="hash", is_active=True, role_id=1, must_change_password=False)
             session.add(user)
             exp = LogExport(
                 id="EXP-1001",

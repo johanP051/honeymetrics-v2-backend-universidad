@@ -25,6 +25,7 @@ ENV/
 # Testing & Coverage
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 
 # Logs & Temporary Data
