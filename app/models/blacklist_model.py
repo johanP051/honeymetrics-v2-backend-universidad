@@ -44,3 +44,8 @@ class BlacklistEntry(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+
+# Alias de compatibilidad para capas de CTI
+ThreatBlacklist = BlacklistEntry
+
