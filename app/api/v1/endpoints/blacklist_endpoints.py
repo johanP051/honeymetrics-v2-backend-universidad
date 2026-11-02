@@ -18,7 +18,6 @@ from app.schemas.threat_schema import BlacklistVaultResponse
 from app.services.blacklist_service import BlacklistService
 
 router = APIRouter(
-    prefix="/blacklist",
     tags=["Blacklist — Threat Center CRUD"],
 )
 
