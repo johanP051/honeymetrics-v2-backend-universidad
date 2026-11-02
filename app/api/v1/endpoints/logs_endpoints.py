@@ -22,6 +22,7 @@ from app.schemas.log_export_schema import (
     LogReportStatsResponse,
 )
 from app.services.logs_service import LogsService
+from app.services.logs_streamer import LogsStreamer
 from app.services.telegram_service import TelegramService
 
 router = APIRouter(prefix="/logs", tags=["Logs & Export"])
@@ -143,6 +144,14 @@ def download_log_export(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"La exportación '{export_id}' se encuentra en estado '{record.status}'. Debe estar 'Listo' para su descarga.",
+        )
+
+    # Anti-archivo-vacío: si no existe ninguna fuente real (disco ni Indexer)
+    # se responde 503 ANTES de iniciar el stream, jamás un .jsonl de 0 bytes.
+    if not LogsStreamer.has_real_source(record):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"La exportación '{export_id}' no tiene datasets reales disponibles en este momento. Intenta de nuevo más tarde.",
         )
 
     filename = f"honeymetrics_{export_id}.jsonl"
