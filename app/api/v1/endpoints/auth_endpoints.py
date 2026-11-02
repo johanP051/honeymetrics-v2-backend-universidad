@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import bearer_scheme, get_current_user
 from app.core.permissions import get_scopes_for_role
+from app.core.rate_limit import limiter
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.models.user_model import User
@@ -47,7 +48,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     "/login",
     responses={status.HTTP_401_UNAUTHORIZED: {"description": "Credenciales inválidas"}},
 )
-def login(credentials: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, credentials: LoginRequest, db: Session = Depends(get_db)):
     """Inicia sesión validando credenciales y derivando a flujo MFA si está habilitado."""
     user = authenticate_user(db, str(credentials.email), credentials.password)
     if user is None:
@@ -107,9 +109,8 @@ def mfa_disable(current_user: User = Depends(get_current_user), db: Session = De
     return disable_mfa(db, current_user)
 
 
-@router.post("/mfa/verify-login", response_model=TokenResponse)
-def mfa_verify_login(payload: MfaVerifyLoginRequest, db: Session = Depends(get_db)):
-    """Verifica OTP o código de respaldo, quema jti y emite JWT definitivo con scopes."""
+def _verify_login_core(payload: MfaVerifyLoginRequest, db: Session) -> TokenResponse:
+    """Núcleo compartido de verificación MFA (sin decoradores, evita doble conteo)."""
     user = verify_login_mfa(db, payload.mfa_token, payload.code)
     role_name = user.role.name if getattr(user, "role", None) else None
     user_scopes = get_scopes_for_role(role_name)
@@ -133,10 +134,18 @@ def mfa_verify_login(payload: MfaVerifyLoginRequest, db: Session = Depends(get_d
     )
 
 
+@router.post("/mfa/verify-login", response_model=TokenResponse)
+@limiter.limit("5/minute")
+def mfa_verify_login(request: Request, payload: MfaVerifyLoginRequest, db: Session = Depends(get_db)):
+    """Verifica OTP o código de respaldo, quema jti y emite JWT definitivo con scopes."""
+    return _verify_login_core(payload, db)
+
+
 @router.post("/login/mfa-verify", response_model=TokenResponse, summary="Alias de verificación MFA")
-def login_mfa_verify_alias(payload: MfaVerifyLoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login_mfa_verify_alias(request: Request, payload: MfaVerifyLoginRequest, db: Session = Depends(get_db)):
     """Ruta alias para compatibilidad retroactiva con clientes que consumen /login/mfa-verify."""
-    return mfa_verify_login(payload=payload, db=db)
+    return _verify_login_core(payload, db)
 
 
 @router.post("/logout", summary="Cerrar sesión y revocar token [AUTH]")
@@ -161,7 +170,8 @@ def logout(
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """Envía correo con token para restablecer contraseña si el usuario existe."""
     process_password_recovery(db, str(payload.email))
     return {"message": "Si el correo existe, se envió un enlace de recuperación."}
