@@ -74,10 +74,11 @@ def create_access_token(
     scopes: Optional[list[str]] = None,
     auth_version: int = 0,
     mfa_pending: bool = False,
+    role: Optional[str] = None,
 ) -> str:
     """
     Genera un JWT firmado con HS256. Soporta subject como str/int o dict de payload.
-    Incluye jti único, exp, scopes, auth_version y opcionalmente mfa_pending.
+    Incluye jti único, exp, scopes, auth_version, role, role_name y opcionalmente mfa_pending.
     """
     if expires_delta is not None:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -94,6 +95,13 @@ def create_access_token(
             to_encode["scopes"] = []
         if "auth_version" not in to_encode:
             to_encode["auth_version"] = auth_version
+        if role is not None:
+            to_encode["role"] = role
+            to_encode["role_name"] = role
+        elif "role" in to_encode and "role_name" not in to_encode:
+            to_encode["role_name"] = to_encode["role"]
+        elif "role_name" in to_encode and "role" not in to_encode:
+            to_encode["role"] = to_encode["role_name"]
         if mfa_pending:
             to_encode["mfa_pending"] = True
     else:
@@ -104,6 +112,9 @@ def create_access_token(
             "scopes": scopes or [],
             "auth_version": auth_version,
         }
+        if role is not None:
+            to_encode["role"] = role
+            to_encode["role_name"] = role
         if mfa_pending:
             to_encode["mfa_pending"] = True
 

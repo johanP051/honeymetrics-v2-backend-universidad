@@ -21,6 +21,7 @@ from app.schemas.admin_schema import (
     UserUpdateAdminRequest,
 )
 from app.services.audit_service import AuditService
+from app.services.email_service import EmailService
 
 __all__ = [
     "AdminService",
@@ -160,7 +161,9 @@ class AdminService:
             actor_email=admin.email if admin else None, entity_id=str(user_id),
             details={"target_email": user.email, "auth_version": user.auth_version},
         )
+        user_email = user.email
         db.commit()
+        EmailService.send_mfa_reset_notification_email(email=user_email)
         return {"message": f"MFA para el usuario ID {user_id} reseteado exitosamente."}
 
     @staticmethod

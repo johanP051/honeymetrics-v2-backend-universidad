@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         return cidrs
 
     # Frontend Config & CORS
-    FRONTEND_URL: str = "http://localhost:5174"
+    FRONTEND_URL: str = "http://localhost:5173"
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:5174",
         "http://localhost:5173",

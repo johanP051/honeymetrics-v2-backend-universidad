@@ -22,12 +22,26 @@ router = APIRouter(
     prefix="/admin",
     tags=["Panel de Administración"],
 )
+admin_users_router = APIRouter(
+    prefix="/users",
+    tags=["Gestión de Usuarios (Admin)"],
+)
 
 
 @router.get(
     "/users",
     response_model=List[UserListItemResponse],
     summary="Listar usuarios del sistema con filtros [ADMIN]",
+)
+@admin_users_router.get(
+    "",
+    include_in_schema=False,
+    response_model=List[UserListItemResponse],
+)
+@admin_users_router.get(
+    "/",
+    response_model=List[UserListItemResponse],
+    summary="Listar usuarios del sistema con filtros [ADMIN] (alias /users)",
 )
 def list_users(
     search: Optional[str] = Query(default=None, description="Búsqueda por email"),
@@ -45,6 +59,18 @@ def list_users(
     response_model=UserListItemResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Crear nuevo usuario con contraseña temporal [ADMIN]",
+)
+@admin_users_router.post(
+    "",
+    include_in_schema=False,
+    response_model=UserListItemResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@admin_users_router.post(
+    "/",
+    response_model=UserListItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear nuevo usuario con contraseña temporal [ADMIN] (alias /users)",
 )
 def create_user(
     payload: UserCreateAdminRequest,
@@ -68,6 +94,11 @@ def create_user(
     response_model=UserListItemResponse,
     summary="Modificar rol o estado de un usuario [ADMIN]",
 )
+@admin_users_router.put(
+    "/{user_id}",
+    response_model=UserListItemResponse,
+    summary="Modificar rol o estado de un usuario [ADMIN] (alias /users)",
+)
 def update_user(
     user_id: int,
     payload: UserUpdateAdminRequest,
@@ -83,6 +114,11 @@ def update_user(
     status_code=status.HTTP_200_OK,
     summary="Eliminar usuario del sistema [ADMIN]",
 )
+@admin_users_router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Eliminar usuario del sistema [ADMIN] (alias /users)",
+)
 def delete_user(
     user_id: int,
     current_admin: User = Depends(require_admin_user),
@@ -96,6 +132,10 @@ def delete_user(
 @router.post(
     "/users/{user_id}/mfa/reset",
     summary="Resetear autenticación 2FA de un usuario [ADMIN]",
+)
+@admin_users_router.post(
+    "/{user_id}/mfa/reset",
+    summary="Resetear autenticación 2FA de un usuario [ADMIN] (alias /users)",
 )
 def reset_user_mfa(
     user_id: int,

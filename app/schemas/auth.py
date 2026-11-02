@@ -1,5 +1,5 @@
 from typing import List, Literal, Optional
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -26,6 +26,7 @@ class TokenResponse(BaseModel):
     token_type: Literal["bearer"] = "bearer"
     user: Optional[UserResponse] = None
     mfa_required: bool = False
+    must_change_password: bool = False
     scopes: List[str] = []
 
 
@@ -62,20 +63,25 @@ class MfaDisableResponse(BaseModel):
 
 class MfaVerifyLoginRequest(BaseModel):
     mfa_token: str
-    code: str = Field(
-        ...,
-        min_length=6,
-        max_length=9,
+    code: Optional[str] = Field(
+        default=None,
         description="Código TOTP (6 dígitos) o código de respaldo (XXXX-XXXX)",
     )
+    totp_code: Optional[str] = Field(
+        default=None,
+        description="Alias de código TOTP compatible con frontend y versiones previas",
+    )
 
-    @field_validator("code")
-    @classmethod
-    def validate_code_format(cls, v: str) -> str:
-        clean = v.strip()
+    @model_validator(mode="after")
+    def validate_code_presence_and_format(self) -> "MfaVerifyLoginRequest":
+        effective_code = self.code or self.totp_code
+        if not effective_code:
+            raise ValueError("El código de verificación ('code' o 'totp_code') es obligatorio.")
+        clean = effective_code.strip()
         if len(clean) not in (6, 8, 9):
             raise ValueError("El código debe contener 6 dígitos (TOTP) o formato de respaldo (XXXX-XXXX).")
-        return clean
+        self.code = clean
+        return self
 
 
 class MfaTokenResponse(BaseModel):
