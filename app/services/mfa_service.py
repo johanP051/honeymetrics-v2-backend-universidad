@@ -25,6 +25,7 @@ from app.models.audit_log_model import AuditLog
 from app.models.mfa_backup_code_model import MFABackupCode
 from app.models.revoked_token_model import RevokedToken
 from app.models.user_model import User
+from app.services.email_service import EmailService
 
 
 def _generate_backup_codes(count: int = 8) -> List[str]:
@@ -103,6 +104,11 @@ def disable_mfa(db: Session, user: User) -> dict:
     ))
     db.commit()
     db.refresh(user)
+
+    # Correo 3 (paridad con el backend guía): aviso al usuario de que su 2FA fue desactivado.
+    # EmailService._dispatch_email nunca lanza excepciones hacia arriba: el flujo HTTP
+    # NO se rompe si Resend falla (correo defensivo, PB-HM-06.1).
+    EmailService.send_mfa_reset_notification_email(email=user.email)
 
     role_name = user.role.name if getattr(user, "role", None) else None
     user_scopes = get_scopes_for_role(role_name)
