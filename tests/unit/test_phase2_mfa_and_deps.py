@@ -5,6 +5,7 @@ HoneyMetrics Backend v2.0 (UDEC)
 import pyotp
 import pytest
 from datetime import datetime, timezone
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -122,20 +123,23 @@ def test_mfa_token_rejected_in_private_endpoints_and_no_replay(client, phase2_db
 
 
 def test_must_change_password_server_side_caging(client, phase2_db):
-    """Verifica confinamiento de usuarios con must_change_password=True en endpoints operativos."""
+    """Verifica confinamiento de usuarios con must_change_password=True en endpoints operativos.
+    La bandera REQUIRE_PASSWORD_CHANGE_ON_FIRST_LOGIN se fuerza a True: depende del entorno,
+    no del unportado .env (la .env de convergencia la define False por diseño de semillas)."""
     user = phase2_db.query(User).filter(User.email == "phase2@ucundinamarca.edu.co").first()
     user.must_change_password = True
     phase2_db.commit()
 
     token = client.post("/api/v1/auth/login", json={"email": "phase2@ucundinamarca.edu.co", "password": "Testing123456"}).json()["access_token"]
-    # Endpoint operativo denegado con 403
-    op_res = client.get("/api/v1/admin/users", headers={"Authorization": f"Bearer {token}"})
-    assert op_res.status_code == 403
-    assert "temporal" in op_res.json()["detail"].lower()
+    # Endpoint operativo denegado con 403 (bandera de gobernanza forzada a True en este test)
+    with patch("app.core.config.settings.REQUIRE_PASSWORD_CHANGE_ON_FIRST_LOGIN", True):
+        op_res = client.get("/api/v1/admin/users", headers={"Authorization": f"Bearer {token}"})
+        assert op_res.status_code == 403
+        assert "temporal" in op_res.json()["detail"].lower()
 
-    # Endpoint permitido (logout)
-    logout_res = client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
-    assert logout_res.status_code == 200
+        # Endpoint permitido (logout)
+        logout_res = client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
+        assert logout_res.status_code == 200
 
 
 def test_canonical_role_equivalences_and_anti_spoofing():
