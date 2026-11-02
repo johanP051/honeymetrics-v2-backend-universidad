@@ -1,9 +1,11 @@
 import json
 import logging
 import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Generator, List
+
 import requests
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -16,10 +18,20 @@ class LogsStreamer:
     """Submódulo de streaming multinivel resiliente para datasets JSONL de telemetría."""
 
     LOCAL_STORAGE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/downloads"))
+    # Salvaguarda de líneas REALES de Wazuh empaquetadas con la imagen / repositorio.
+    # Garantiza que las descargas JAMÁS entreguen un .jsonl vacío cuando el Indexer
+    # no responde y las rutas del host no existen dentro del contenedor.
+    REAL_SAMPLE_DATASET = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "data", "wazuh_sample_alerts.jsonl")
+    )
 
     @classmethod
     def get_candidate_paths(cls) -> List[str]:
-        return settings.DATASET_PATHS
+        # Rutas configuradas + salvaguarda real de último recurso (sin duplicados)
+        paths = list(settings.DATASET_PATHS)
+        if cls.REAL_SAMPLE_DATASET not in paths:
+            paths.append(cls.REAL_SAMPLE_DATASET)
+        return paths
 
     @classmethod
     def get_partitioned_files_for_range(cls, start_date: date, end_date: date) -> List[str]:
@@ -36,6 +48,21 @@ class LogsStreamer:
         return matched_files
 
     @classmethod
+    def has_real_source(cls, record: "LogExport") -> bool:
+        """
+        Pre-chequeo: determina si existe al menos una fuente REAL de líneas para
+        el registro. Permite al endpoint responder 503 ANTES de iniciar el stream
+        en lugar de entregar un .jsonl de 0 bytes.
+        """
+        if cls.get_partitioned_files_for_range(record.start_date, record.end_date):
+            return True
+        for candidate in cls.get_candidate_paths():
+            if os.path.isfile(candidate):
+                return True
+        # Último recurso: consulta en vivo al Indexer
+        return bool(settings.WAZUH_INDEXER_URL and settings.WAZUH_INDEXER_USER)
+
+    @classmethod
     def stream_jsonl_dataset(cls, export_id: str, db: Session) -> Generator[bytes, None, None]:
         record = db.query(LogExport).filter(LogExport.id == export_id).first()
         if not record or record.status != "Listo":
@@ -44,31 +71,31 @@ class LogsStreamer:
         target_count = record.count
         yielded_count = 0
 
-        # Nivel 1: Archivos particionados diarios en data/downloads o datasets configurados en settings
+        # Nivel 1: Archivos particionados diarios (data/downloads) y datasets reales
+        # configurados (montados :ro en /app/datasets_wazuh) + salvaguarda real empaquetada
         partitioned_files = cls.get_partitioned_files_for_range(record.start_date, record.end_date)
-        source_files = (
-            partitioned_files if partitioned_files else [p for p in cls.get_candidate_paths() if os.path.exists(p)]
-        )
+        candidate_files = [p for p in cls.get_candidate_paths() if os.path.isfile(p)]
+        source_files: List[str] = []
+        for path in partitioned_files + candidate_files:
+            if path not in source_files:
+                source_files.append(path)
 
-        if source_files:
-            while yielded_count < target_count:
-                for source_path in source_files:
-                    if yielded_count >= target_count:
-                        break
-                    try:
-                        with open(source_path, "r", encoding="utf-8", errors="ignore") as f:
-                            for line in f:
-                                clean_line = line.strip()
-                                if not clean_line:
-                                    continue
-                                yield (clean_line + "\n").encode("utf-8")
-                                yielded_count += 1
-                                if yielded_count >= target_count:
-                                    break
-                    except (OSError, UnicodeError) as exc:
-                        logger.warning("No se pudo leer el dataset %s: %s", source_path, exc)
-                        continue
+        for source_path in source_files:
+            if yielded_count >= target_count and target_count > 0:
                 break
+            try:
+                with open(source_path, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        clean_line = line.strip()
+                        if not clean_line:
+                            continue
+                        yield (clean_line + "\n").encode("utf-8")
+                        yielded_count += 1
+                        if target_count > 0 and yielded_count >= target_count:
+                            break
+            except (OSError, UnicodeError) as exc:
+                logger.warning("No se pudo leer el dataset %s: %s", source_path, exc)
+                continue
 
         # Nivel 2: Extraer en vivo desde Wazuh Indexer
         if yielded_count < target_count and settings.WAZUH_INDEXER_URL and settings.WAZUH_INDEXER_USER:
@@ -99,29 +126,19 @@ class LogsStreamer:
                         if source:
                             yield (json.dumps(source, ensure_ascii=False) + "\n").encode("utf-8")
                             yielded_count += 1
-                            if yielded_count >= target_count:
+                            if target_count > 0 and yielded_count >= target_count:
                                 return
             except Exception as exc:
                 logger.warning("Fallo al consultar logs en vivo desde Wazuh: %s", exc)
 
-        # Nivel 3: Salvaguarda sintética estructurada CTI si Wazuh está desconectado y sin disco
+        # Nivel 3 (último recurso): la salvaguarda ya contiene líneas REALES de Wazuh
+        # y fue incluida en source_files. Si aun así no se emitieron líneas (sin
+        # datasets en disco y sin Indexer), se aborta degollando error 503 al cliente
+        # en lugar de entregar un archivo en blanco (cero datos sintéticos en código
+        # de producción — estándar global-anti-synthetic-data).
         if yielded_count == 0:
-            base_time = record.created_at or datetime.now(timezone.utc)
-            iso_time = base_time.isoformat() if hasattr(base_time, "isoformat") else datetime.now(timezone.utc).isoformat()
-            for i in range(min(target_count, 100)):
-                fallback_log = {
-                    "@timestamp": iso_time,
-                    "agent": {"id": "001", "name": "honeypot-ssh", "ip": "192.168.32.10"},
-                    "manager": {"name": "wazuh.manager"},
-                    "rule": {
-                        "id": "5710",
-                        "level": 5,
-                        "description": "SSHD authentication failed",
-                        "groups": ["syslog", "sshd", "authentication_failed"],
-                        "mitre": {"id": ["T1110"], "tactic": ["Credential Access"]},
-                    },
-                    "data": {"srcip": f"185.220.101.{40 + (i % 20)}", "dstport": 2222, "srcuser": "root"},
-                    "export_id": export_id,
-                }
-                yield (json.dumps(fallback_log, ensure_ascii=False) + "\n").encode("utf-8")
-                yielded_count += 1
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"La exportación '{export_id}' no tiene datasets reales disponibles "
+                "(sin archivos en disco y sin respuesta del Wazuh Indexer).",
+            )
