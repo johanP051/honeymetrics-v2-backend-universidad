@@ -125,6 +125,7 @@ class UserProfileService:
             subject=str(user.id),
             scopes=user_scopes,
             auth_version=user.auth_version,
+            role=role_name,
         )
 
         return {

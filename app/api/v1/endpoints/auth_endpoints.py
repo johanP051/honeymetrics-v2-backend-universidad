@@ -69,6 +69,7 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
         str(user.id),
         scopes=user_scopes,
         auth_version=int(user.auth_version or 0),
+        role=role_name,
     )
 
     user_response = UserResponse.model_validate(user)
@@ -80,6 +81,7 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
         token_type="bearer",
         user=user_response,
         scopes=user_scopes,
+        must_change_password=bool(user.must_change_password),
     )
 
 
@@ -115,6 +117,7 @@ def mfa_verify_login(payload: MfaVerifyLoginRequest, db: Session = Depends(get_d
         str(user.id),
         scopes=user_scopes,
         auth_version=int(user.auth_version or 0),
+        role=role_name,
     )
     user_response = UserResponse.model_validate(user)
     user_response.role_name = role_name
@@ -125,8 +128,15 @@ def mfa_verify_login(payload: MfaVerifyLoginRequest, db: Session = Depends(get_d
         token_type="bearer",
         user=user_response,
         scopes=user_scopes,
+        must_change_password=bool(user.must_change_password),
         mfa_required=False,
     )
+
+
+@router.post("/login/mfa-verify", response_model=TokenResponse, summary="Alias de verificación MFA")
+def login_mfa_verify_alias(payload: MfaVerifyLoginRequest, db: Session = Depends(get_db)):
+    """Ruta alias para compatibilidad retroactiva con clientes que consumen /login/mfa-verify."""
+    return mfa_verify_login(payload=payload, db=db)
 
 
 @router.post("/logout", summary="Cerrar sesión y revocar token [AUTH]")
