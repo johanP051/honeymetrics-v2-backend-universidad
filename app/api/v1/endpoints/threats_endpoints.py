@@ -11,7 +11,7 @@ from app.schemas.threat_schema import (
 )
 from app.services.threat_service import ThreatService
 
-router = APIRouter(prefix="/threats", tags=["Threat Intelligence"])
+router = APIRouter(tags=["Threat Intelligence"])
 
 
 @router.get("/summary", response_model=ThreatSummarySchema, summary="Resumen global de CTI con filtrado temporal")

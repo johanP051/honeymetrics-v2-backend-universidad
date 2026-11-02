@@ -76,7 +76,12 @@ def verify_and_enable_mfa(db: Session, user: User, code: str) -> dict:
 
     role_name = user.role.name if getattr(user, "role", None) else None
     user_scopes = get_scopes_for_role(role_name)
-    new_token = create_access_token(str(user.id), scopes=user_scopes, auth_version=user.auth_version)
+    new_token = create_access_token(
+        str(user.id),
+        scopes=user_scopes,
+        auth_version=user.auth_version,
+        role=role_name,
+    )
     return {
         "message": "Autenticación de dos factores (2FA) activada correctamente.",
         "backup_codes": backup_codes,
@@ -101,7 +106,12 @@ def disable_mfa(db: Session, user: User) -> dict:
 
     role_name = user.role.name if getattr(user, "role", None) else None
     user_scopes = get_scopes_for_role(role_name)
-    new_token = create_access_token(str(user.id), scopes=user_scopes, auth_version=user.auth_version)
+    new_token = create_access_token(
+        str(user.id),
+        scopes=user_scopes,
+        auth_version=user.auth_version,
+        role=role_name,
+    )
     return {
         "message": "Autenticación de dos factores (2FA) desactivada.",
         "access_token": new_token,
