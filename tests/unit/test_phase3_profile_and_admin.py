@@ -125,7 +125,7 @@ def test_delete_user_with_active_mfa_resolves_foreign_keys_cleanly(client, phase
     assert target.is_mfa_enabled is True
     # Agregar registro en blacklist vinculado al usuario
     bl = BlacklistEntry(
-        ip="198.51.100.22", ip_type="IPv4", country="CO", threat_score=85,
+        ip="45.61.186.22", ip_type="IPv4", country="CO", threat_score=85,
         category="Botnet", status="Bloqueada", blocked_by_user_id=target.id,
     )
     phase3_db.add(bl)

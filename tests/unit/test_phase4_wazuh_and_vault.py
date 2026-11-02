@@ -101,7 +101,7 @@ def test_delete_blacklist_creates_vault_and_audit(client, phase4_db):
     create_resp = client.post(
         "/api/v1/threats/blacklist/",
         headers=headers,
-        json={"ip": "198.51.100.99", "threat_score": 92, "category": "Botnet Storm", "notes": "C2 node"},
+        json={"ip": "45.61.186.9", "threat_score": 92, "category": "Botnet Storm", "notes": "C2 node"},
     )
     assert create_resp.status_code == 201
     entry_id = create_resp.json()["id"]
@@ -113,7 +113,7 @@ def test_delete_blacklist_creates_vault_and_audit(client, phase4_db):
     # 3. Validar presencia en BlacklistAuditVault
     vault_entry = phase4_db.query(BlacklistAuditVault).filter(BlacklistAuditVault.original_entry_id == entry_id).first()
     assert vault_entry is not None
-    assert vault_entry.original_ip == "198.51.100.99"
+    assert vault_entry.original_ip == "45.61.186.9"
     assert vault_entry.threat_score == 92
     assert vault_entry.status == "Bloqueada"
     assert vault_entry.deleted_by_user_id is not None
@@ -124,7 +124,7 @@ def test_delete_blacklist_creates_vault_and_audit(client, phase4_db):
         AuditLog.entity_id == str(entry_id),
     ).first()
     assert audit_log is not None
-    assert audit_log.ip_address == "198.51.100.99"
+    assert audit_log.ip_address == "45.61.186.9"
 
 
 def test_get_blacklist_vault_endpoint(client, phase4_db):
@@ -136,7 +136,7 @@ def test_get_blacklist_vault_endpoint(client, phase4_db):
     headers_analyst = {"Authorization": f"Bearer {login_analyst['access_token']}"}
 
     # Crear y eliminar dos IPs para poblar la bóveda
-    for ip, score in [("198.51.100.10", 75), ("198.51.100.20", 88)]:
+    for ip, score in [("45.61.187.10", 75), ("45.61.187.20", 88)]:
         cr = client.post("/api/v1/threats/blacklist/", headers=headers_admin, json={"ip": ip, "threat_score": score, "category": "Scanner"})
         client.delete(f"/api/v1/threats/blacklist/{cr.json()['id']}", headers=headers_admin)
 
