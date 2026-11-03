@@ -4,13 +4,14 @@
 -- CÁTEDRA: INGENIERÍA DE SOFTWARE II / BASES DE DATOS AVANZADAS
 -- DOCENTE EVALUADOR: ING. OSCAR GÓMEZ
 -- APLICACIÓN: HoneyMetrics CTI v2.0
--- OBJETIVO: Catálogo Oficial de Programabilidad en Base de Datos (3 SPs + 3 Triggers)
+-- OBJETIVO: Catálogo Oficial de Programabilidad en Base de Datos (5 SPs + 5 Triggers)
 -- AUTORES: JOHAN SEBASTIÁN POSADA BELTRÁN & JUAN PABLO FONSECA CELIS
--- FECHA: 2026-11-01
+-- FECHA: 2026-11-03
 -- MOTOR: POSTGRESQL 16 (PL/pgSQL)
 -- TABLA DE MODIFICACIONES:
--- | Versión | Fecha      | Autor                     | Descripción del Cambio                      |
--- | 1.0     | 2026-11-01 | Johan Posada / Juan Fonseca | Entrega oficial de Triggers y SPs auditables |
+-- | Versión | Fecha      | Autor                     | Descripción del Cambio                                      |
+-- | 1.0     | 2026-11-01 | Johan Posada / Juan Fonseca | Entrega inicial de 3 Triggers y 3 SPs auditables           |
+-- | 2.0     | 2026-11-03 | Johan Posada / Juan Fonseca | Catálogo completo: 5 Triggers y 5 SPs con salvaguardas SOC |
 -- =====================================================================================
 
 -- =====================================================================================
@@ -290,7 +291,157 @@ EXECUTE FUNCTION fn_trg_audit_user_security_changes();
 
 
 -- =====================================================================================
--- 4. PROCEDIMIENTO ALMACENADO 1: PURGA Y MANTENIMIENTO DE TOKENS Y EXPORTACIONES
+-- 4. TRIGGER 4: AUDITORÍA DE EVENTOS DE SEGURIDAD TRAS MODIFICACIÓN DE PERFIL DE USUARIO
+-- =====================================================================================
+-- ENCABEZADO FORMAL DOCENTE:
+-- APLICACIÓN: Control de Acceso y Gestión de Identidades (IAM SOC)
+-- OBJETIVO: Detectar cambios sensibles en role_id, is_active o is_mfa_enabled tras un UPDATE
+--           en la tabla users e insertar una entrada descriptiva estructurada en audit_logs.
+-- AUTORES: Johan Sebastián Posada Beltrán & Juan Pablo Fonseca Celis
+-- FECHA: 2026-11-03
+--
+-- EXPLICACIÓN EN PRIMERA PERSONA:
+-- "Diseño este trigger AFTER UPDATE sobre la tabla users para vigilar alteraciones en el perfil de
+-- privilegios y autenticación de los usuarios. Cuando se modifica el rol (role_id), la activación (is_active)
+-- o la configuración de segundo factor (is_mfa_enabled), genero una entrada en audit_logs describiendo
+-- el cambio con detalle forense estructurado en JSON, asegurando no repudio y trazabilidad institucional."
+-- =====================================================================================
+
+CREATE OR REPLACE FUNCTION fn_trg_audit_user_security_events()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Compruebo si cambiaron atributos de seguridad de primer orden: rol, estado activo o 2FA
+    IF OLD.role_id IS DISTINCT FROM NEW.role_id
+       OR OLD.is_active IS DISTINCT FROM NEW.is_active
+       OR OLD.is_mfa_enabled IS DISTINCT FROM NEW.is_mfa_enabled THEN
+
+        INSERT INTO audit_logs (
+            actor_user_id,
+            actor_email,
+            action,
+            entity_name,
+            entity_id,
+            details,
+            created_at
+        ) VALUES (
+            NEW.id,
+            NEW.email,
+            'USER_SECURITY_EVENTS_AUDIT',
+            'users',
+            NEW.id::TEXT,
+            json_build_object(
+                'event_trigger', 'trg_audit_user_security_events',
+                'user_email', NEW.email,
+                'role_changed', (OLD.role_id IS DISTINCT FROM NEW.role_id),
+                'old_role_id', OLD.role_id,
+                'new_role_id', NEW.role_id,
+                'active_changed', (OLD.is_active IS DISTINCT FROM NEW.is_active),
+                'old_is_active', OLD.is_active,
+                'new_is_active', NEW.is_active,
+                'mfa_changed', (OLD.is_mfa_enabled IS DISTINCT FROM NEW.is_mfa_enabled),
+                'old_mfa_enabled', OLD.is_mfa_enabled,
+                'new_mfa_enabled', NEW.is_mfa_enabled
+            ),
+            NOW() AT TIME ZONE 'UTC'
+        );
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_audit_user_security_events ON users;
+CREATE TRIGGER trg_audit_user_security_events
+AFTER UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION fn_trg_audit_user_security_events();
+
+
+-- =====================================================================================
+-- 5. TRIGGER 5: SALVAGUARDA ANTI-BLOQUEO ADMINISTRATIVO (PREVENCIÓN DE SELF-LOCKOUT)
+-- =====================================================================================
+-- ENCABEZADO FORMAL DOCENTE:
+-- APLICACIÓN: Gobernanza de Cuentas y Prevención de Denegación de Servicio Administrativa
+-- OBJETIVO: Garantizar la invariante de disponibilidad que impide dejar al sistema sin al menos
+--           un usuario con rol 'Administrador' activo, lanzando excepción P0003 ante intentos de violación.
+-- AUTORES: Johan Sebastián Posada Beltrán & Juan Pablo Fonseca Celis
+-- FECHA: 2026-11-03
+--
+-- EXPLICACIÓN EN PRIMERA PERSONA:
+-- "Implemento este trigger BEFORE UPDATE OR DELETE sobre users como salvaguarda crítica del sistema.
+-- Determino si la operación intenta desactivar, reasignar de rol o eliminar físicamente a un usuario
+-- con rol 'Administrador'. Si tras dicha operación el conteo de administradores activos descendería
+-- a cero, aborto la transacción lanzando la excepción 'P0003', evitando el bloqueo total del sistema."
+-- =====================================================================================
+
+CREATE OR REPLACE FUNCTION fn_trg_prevent_admin_self_lockout()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    -- Declaro las variables para identificar el rol Administrador y contabilizar los administradores restantes
+    v_admin_role_id INT;
+    v_active_admins_remaining INT;
+BEGIN
+    -- Localizo el identificador asignado al rol canónico Administrador
+    SELECT id INTO v_admin_role_id
+    FROM roles
+    WHERE LOWER(BTRIM(name)) = 'administrador';
+
+    -- Si no existe dicho rol en la base de datos, no aplico restricción
+    IF v_admin_role_id IS NULL THEN
+        RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+    END IF;
+
+    -- Verifico si la fila sobre la que se opera corresponde a un Administrador activo
+    IF OLD.role_id = v_admin_role_id AND OLD.is_active = TRUE THEN
+        IF TG_OP = 'DELETE' THEN
+            -- Se intenta eliminar el registro: cuento cuántos Administradores activos quedarían
+            SELECT COUNT(*) INTO v_active_admins_remaining
+            FROM users
+            WHERE role_id = v_admin_role_id
+              AND is_active = TRUE
+              AND id <> OLD.id;
+
+            IF v_active_admins_remaining = 0 THEN
+                RAISE EXCEPTION 'Gobernanza de Seguridad SOC (P0003): No es posible eliminar al último Administrador activo del sistema (prevención de auto-bloqueo catastrófico).'
+                    USING ERRCODE = 'P0003';
+            END IF;
+            RETURN OLD;
+
+        ELSIF TG_OP = 'UPDATE' THEN
+            -- Se intenta actualizar: verifico si se desactiva al usuario o se le cambia el rol
+            IF (NEW.is_active = FALSE) OR (NEW.role_id <> v_admin_role_id) THEN
+                SELECT COUNT(*) INTO v_active_admins_remaining
+                FROM users
+                WHERE role_id = v_admin_role_id
+                  AND is_active = TRUE
+                  AND id <> OLD.id;
+
+                IF v_active_admins_remaining = 0 THEN
+                    RAISE EXCEPTION 'Gobernanza de Seguridad SOC (P0003): No es posible desactivar ni revocar privilegios al último Administrador activo del sistema (prevención de auto-bloqueo catastrófico).'
+                        USING ERRCODE = 'P0003';
+                END IF;
+            END IF;
+            RETURN NEW;
+        END IF;
+    END IF;
+
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_prevent_admin_self_lockout ON users;
+CREATE TRIGGER trg_prevent_admin_self_lockout
+BEFORE UPDATE OR DELETE ON users
+FOR EACH ROW
+EXECUTE FUNCTION fn_trg_prevent_admin_self_lockout();
+
+
+-- =====================================================================================
+-- 6. PROCEDIMIENTO ALMACENADO 1: PURGA Y MANTENIMIENTO DE TOKENS Y EXPORTACIONES
 -- =====================================================================================
 -- ENCABEZADO FORMAL DOCENTE:
 -- APLICACIÓN: Tareas de Mantenimiento y Purgas Automáticas del Sistema
@@ -352,7 +503,7 @@ $$;
 
 
 -- =====================================================================================
--- 5. PROCEDIMIENTO ALMACENADO 2: ESCALAMIENTO Y CONSOLIDACIÓN DE AMENAZAS EN BLACKLIST
+-- 7. PROCEDIMIENTO ALMACENADO 2: ESCALAMIENTO Y CONSOLIDACIÓN DE AMENAZAS EN BLACKLIST
 -- =====================================================================================
 -- ENCABEZADO FORMAL DOCENTE:
 -- APLICACIÓN: Threat Intelligence Center (CTI) y Respuesta a Incidentes
@@ -431,7 +582,7 @@ $$;
 
 
 -- =====================================================================================
--- 6. PROCEDIMIENTO ALMACENADO 3: ROTACIÓN FORZOSA DE CREDENCIALES Y AUDITORÍA POR ROL
+-- 8. PROCEDIMIENTO ALMACENADO 3: ROTACIÓN FORZOSA DE CREDENCIALES Y AUDITORÍA POR ROL
 -- =====================================================================================
 -- ENCABEZADO FORMAL DOCENTE:
 -- APLICACIÓN: Protocolo de Contención de Incidentes de Seguridad de la Información
@@ -501,10 +652,147 @@ $$;
 
 
 -- =====================================================================================
--- 7. SCRIPT DE PRUEBAS COMPLETO Y REPRODUCIBLE PARA DBEAVER (EVIDENCIA DOCENTE)
+-- 9. PROCEDIMIENTO ALMACENADO 4: ESCALAMIENTO MASIVO DE AMENAZAS POR UMBRAL DE RIESGO
+-- =====================================================================================
+-- ENCABEZADO FORMAL DOCENTE:
+-- APLICACIÓN: Threat Intelligence Center (CTI) y Automatización de Mitigación Masiva
+-- OBJETIVO: Escalar a threat_score = 100 y status = 'Bloqueada' todas las IPs en blacklist_entries
+--           que superen o igualen el umbral p_min_score, devolviendo el total en p_updated_count.
+-- AUTORES: Johan Sebastián Posada Beltrán & Juan Pablo Fonseca Celis
+-- FECHA: 2026-11-03
+--
+-- EXPLICACIÓN EN PRIMERA PERSONA:
+-- "Diseño este procedimiento almacenado para respuesta automatizada a gran escala ante ciberataques coordinados.
+-- Recibo el umbral mínimo p_min_score, ejecuto una actualización masiva sobre blacklist_entries fijando
+-- threat_score = 100 y status = 'Bloqueada', capturo el número de registros afectados mediante GET DIAGNOSTICS
+-- y devuelvo el conteo en el parámetro INOUT p_updated_count, auditando la operación en audit_logs."
+-- =====================================================================================
+
+CREATE OR REPLACE PROCEDURE sp_bulk_escalate_threat_scores(
+    IN p_min_score INT,
+    INOUT p_updated_count INT DEFAULT 0
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    -- Declaro la variable donde capturaré las filas afectadas por el UPDATE
+    v_rows INT := 0;
+BEGIN
+    -- Actualizo masivamente las IPs que igualan o superan el umbral establecido
+    UPDATE blacklist_entries
+    SET threat_score = 100,
+        status = 'Bloqueada',
+        notes = COALESCE(notes || E'\n', '') || '[' || to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') || ' UTC] Escalamiento masivo por SP (umbral >= ' || p_min_score::TEXT || ')',
+        updated_at = (NOW() AT TIME ZONE 'UTC')
+    WHERE threat_score >= p_min_score;
+
+    -- Obtengo el total de filas impactadas por la sentencia DML
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    p_updated_count := v_rows;
+
+    -- Inserto la traza de auditoría con la evidencia del escalamiento masivo
+    INSERT INTO audit_logs (
+        actor_user_id,
+        actor_email,
+        action,
+        entity_name,
+        entity_id,
+        details,
+        created_at
+    ) VALUES (
+        NULL,
+        'SOC_AUTOMATION_SP',
+        'SP_BULK_ESCALATE_THREAT_SCORES',
+        'blacklist_entries',
+        'BULK',
+        json_build_object(
+            'min_score_threshold', p_min_score,
+            'updated_count', p_updated_count
+        ),
+        NOW() AT TIME ZONE 'UTC'
+    );
+END;
+$$;
+
+
+-- =====================================================================================
+-- 10. PROCEDIMIENTO ALMACENADO 5: GENERACIÓN DE RESUMEN DE CUMPLIMIENTO Y POSTURA SOC
+-- =====================================================================================
+-- ENCABEZADO FORMAL DOCENTE:
+-- APLICACIÓN: Módulo de Reportes de Cumplimiento SOC y Métricas CTI
+-- OBJETIVO: Consolidar y retornar mediante parámetros INOUT las métricas críticas del estado
+--           de seguridad del sistema: usuarios activos, adopción de MFA, IPs bloqueadas y bóveda.
+-- AUTORES: Johan Sebastián Posada Beltrán & Juan Pablo Fonseca Celis
+-- FECHA: 2026-11-03
+--
+-- EXPLICACIÓN EN PRIMERA PERSONA:
+-- "Construyo este procedimiento almacenado para facilitar la generación de tableros ejecutivos e informes
+-- de auditoría forense. Mediante consultas agregadas sobre las tablas users, blacklist_entries y blacklist_audit_vault,
+-- rescato los cuatro indicadores clave de postura defensiva y los asigno directamente a sus respectivos
+-- parámetros INOUT, persistiendo la captura histórica del snapshot en audit_logs."
+-- =====================================================================================
+
+CREATE OR REPLACE PROCEDURE sp_generate_soc_compliance_summary(
+    INOUT p_active_users INT DEFAULT 0,
+    INOUT p_mfa_enabled_users INT DEFAULT 0,
+    INOUT p_blocked_ips INT DEFAULT 0,
+    INOUT p_vault_records INT DEFAULT 0
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- 1. Contabilizo el total de usuarios con acceso activo al sistema
+    SELECT COUNT(*) INTO p_active_users
+    FROM users
+    WHERE is_active = TRUE;
+
+    -- 2. Contabilizo los usuarios que tienen habilitado el factor de autenticación robusto (MFA)
+    SELECT COUNT(*) INTO p_mfa_enabled_users
+    FROM users
+    WHERE is_active = TRUE
+      AND is_mfa_enabled = TRUE;
+
+    -- 3. Contabilizo el volumen de amenazas mitigadas bajo regla activa 'Bloqueada'
+    SELECT COUNT(*) INTO p_blocked_ips
+    FROM blacklist_entries
+    WHERE status = 'Bloqueada';
+
+    -- 4. Contabilizo la totalidad de registros históricos preservados en la bóveda inmutable
+    SELECT COUNT(*) INTO p_vault_records
+    FROM blacklist_audit_vault;
+
+    -- 5. Registro la consulta de cumplimiento en la bitácora de auditoría
+    INSERT INTO audit_logs (
+        actor_user_id,
+        actor_email,
+        action,
+        entity_name,
+        entity_id,
+        details,
+        created_at
+    ) VALUES (
+        NULL,
+        'SOC_COMPLIANCE_SP',
+        'SP_GENERATE_SOC_COMPLIANCE_SUMMARY',
+        'compliance_summary',
+        'SYSTEM',
+        json_build_object(
+            'active_users', p_active_users,
+            'mfa_enabled_users', p_mfa_enabled_users,
+            'blocked_ips', p_blocked_ips,
+            'vault_records', p_vault_records
+        ),
+        NOW() AT TIME ZONE 'UTC'
+    );
+END;
+$$;
+
+
+-- =====================================================================================
+-- 11. SCRIPT DE PRUEBAS COMPLETO Y REPRODUCIBLE PARA DBEAVER (EVIDENCIA DOCENTE)
 -- =====================================================================================
 -- Conectarse a 127.0.0.1:5433 (Base de datos: honeymetrics_v2, usuario: postgres)
--- y ejecutar en orden los siguientes bloques:
+-- y ejecutar en orden los siguientes bloques de prueba:
 --
 -- PASO 1: Probar Trigger 2 (Sanitización y auto-clasificación de amenaza):
 -- INSERT INTO blacklist_entries (ip, country, threat_score, category, status, notes, created_at, updated_at)
@@ -527,8 +815,76 @@ $$;
 -- CALL sp_archive_and_purge_expired_exports_and_tokens(7);
 -- CALL sp_enforce_role_password_rotation_and_audit('Analista', 'Simulacro preventivo de seguridad');
 --
--- PASO 6: Consultar la Tabla General de Auditoría (audit_logs) con toda la historia:
+-- PASO 6: Probar Trigger 4 (Auditoría de eventos de seguridad en actualización de usuario):
+-- DO $$
+-- DECLARE
+--     v_test_uid INT;
+-- BEGIN
+--     SELECT id INTO v_test_uid FROM users ORDER BY id LIMIT 1;
+--     IF v_test_uid IS NOT NULL THEN
+--         UPDATE users SET is_mfa_enabled = NOT is_mfa_enabled WHERE id = v_test_uid;
+--         UPDATE users SET is_mfa_enabled = NOT is_mfa_enabled WHERE id = v_test_uid;
+--         RAISE NOTICE '>>> Trigger 4 probado: Se generó evento de auditoría para usuario ID %', v_test_uid;
+--     END IF;
+-- END;
+-- $$;
+--
+-- PASO 7: Probar Trigger 5 (Prevención de Auto-Bloqueo de Administrador - Excepción P0003):
+-- DO $$
+-- DECLARE
+--     v_admin_role_id INT;
+-- BEGIN
+--     SELECT id INTO v_admin_role_id FROM roles WHERE LOWER(BTRIM(name)) = 'administrador';
+--     BEGIN
+--         -- Intento de desactivar a todos los administradores activos: debe ser bloqueado por Trigger 5
+--         UPDATE users SET is_active = FALSE WHERE role_id = v_admin_role_id;
+--         RAISE EXCEPTION 'Fallo de prueba: Trigger 5 debió haber impedido la desactivación de administradores.';
+--     EXCEPTION
+--         WHEN SQLSTATE 'P0003' THEN
+--             RAISE NOTICE '>>> ÉXITO: Trigger 5 interceptó la operación e impidió el auto-bloqueo (Excepción P0003 capturada).';
+--         WHEN OTHERS THEN
+--             RAISE NOTICE '>>> Capturada otra excepción: % (SQLSTATE: %)', SQLERRM, SQLSTATE;
+--     END;
+-- END;
+-- $$;
+--
+-- PASO 8: Probar Procedimiento Almacenado 4 (Escalamiento masivo de amenazas con parámetro INOUT):
+-- DO $$
+-- DECLARE
+--     v_count INT := 0;
+-- BEGIN
+--     CALL sp_bulk_escalate_threat_scores(70, v_count);
+--     RAISE NOTICE '>>> SP 4 Ejecutado: Total registros escalados masivamente = %', v_count;
+-- END;
+-- $$;
+--
+-- PASO 9: Probar Procedimiento Almacenado 5 (Resumen de cumplimiento SOC con parámetros INOUT):
+-- DO $$
+-- DECLARE
+--     v_activos INT := 0;
+--     v_mfa INT := 0;
+--     v_bloqueadas INT := 0;
+--     v_boveda INT := 0;
+-- BEGIN
+--     CALL sp_generate_soc_compliance_summary(v_activos, v_mfa, v_bloqueadas, v_boveda);
+--     RAISE NOTICE '>>> SP 5 Resumen SOC: Activos=%, MFA=%, IPs Bloqueadas=%, Bóveda=%',
+--         v_activos, v_mfa, v_bloqueadas, v_boveda;
+-- END;
+-- $$;
+--
+-- PASO 10: Consultar la Tabla General de Auditoría (audit_logs) con toda la historia:
 -- SELECT id, actor_email, action, entity_name, entity_id, details, created_at
 -- FROM audit_logs
--- ORDER BY created_at DESC LIMIT 10;
+-- ORDER BY created_at DESC LIMIT 15;
+--
+-- PASO 11: Verificar existencia de los 5 SPs y 5 Triggers en el catálogo de PostgreSQL:
+-- SELECT routine_name, routine_type
+-- FROM information_schema.routines
+-- WHERE routine_schema = 'public' AND routine_name LIKE 'sp_%'
+-- ORDER BY routine_name;
+--
+-- SELECT trigger_name, event_manipulation, event_object_table
+-- FROM information_schema.triggers
+-- WHERE trigger_schema = 'public'
+-- ORDER BY trigger_name;
 -- =====================================================================================
