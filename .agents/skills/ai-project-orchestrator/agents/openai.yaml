@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Project Orchestrator"
+  short_description: "Orquesta proyectos y delega fases a Gemini Flash/Pro"
+  default_prompt: "Analiza este proyecto, descubre su contexto y orquesta la ejecución por fases con Gemini Flash y Pro."

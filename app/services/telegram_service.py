@@ -71,6 +71,8 @@ class TelegramService:
         """
         Procesa el clic de un botón interactivo (Inline Keyboard) desde Telegram,
         notifica al usuario con answerCallbackQuery y actualiza el mensaje original.
+        Solo se aceptan callbacks cuyo chat_id coincida con ADMIN_TELEGRAM_CHAT_ID
+        (Zero-Trust: el secret del webhook protege el canal, el chat_id protege la identidad).
         """
         callback_id = callback_query.get("id")
         data = callback_query.get("data", "")
@@ -81,6 +83,15 @@ class TelegramService:
         token = settings.TELEGRAM_BOT_TOKEN
         if not token:
             return {"status": "error", "detail": "Token no configurado"}
+
+        if not settings.ADMIN_TELEGRAM_CHAT_ID or str(chat_id) != str(settings.ADMIN_TELEGRAM_CHAT_ID):
+            logger.error(
+                "Webhook de Telegram rechazado en handle_callback_query: chat_id %s no autorizado "
+                "(ADMIN_TELEGRAM_CHAT_ID=%s)",
+                chat_id,
+                settings.ADMIN_TELEGRAM_CHAT_ID,
+            )
+            return {"status": "error", "detail": "Chat no autorizado para aprobar o rechazar exportaciones."}
 
         # Identificar la acción y el export_id
         if data.startswith("approve_"):
