@@ -39,7 +39,7 @@ token="${CLOUDFLARE_API_TOKEN:-}"
 unset CLOUDFLARE_API_TOKEN
 declared_account="${CLOUDFLARE_ACCOUNT_ID:-}"
 
-if [ -z "$token" ]; then
+if [[ -z "$token" ]]; then
   echo "auth-probe: \$CLOUDFLARE_API_TOKEN is not set." >&2
   emit '{"status":"missing_token","reason":"no_env_var"}'
 fi
@@ -51,25 +51,25 @@ fi
 accounts_json=""
 account_count=0
 
-if [ -n "${WRANGLER_BIN:-}" ]; then
+if [[ -n "${WRANGLER_BIN:-}" ]]; then
   if [[ "$WRANGLER_BIN" != /* || ! -x "$WRANGLER_BIN" ]]; then
     echo "auth-probe: WRANGLER_BIN must be an executable absolute path." >&2
     emit '{"status":"missing_token","reason":"invalid_wrangler_path"}'
   fi
 
   wrangler_bin=$(python3 -I -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$WRANGLER_BIN")
-  if [ "$wrangler_bin" != "$WRANGLER_BIN" ]; then
+  if [[ "$wrangler_bin" != "$WRANGLER_BIN" ]]; then
     echo "auth-probe: WRANGLER_BIN must be canonical, without symlinks." >&2
     emit '{"status":"missing_token","reason":"noncanonical_wrangler_path"}'
   fi
-  if [ -n "${PROJECT_ROOT:-}" ]; then
+  if [[ -n "${PROJECT_ROOT:-}" ]]; then
     project_root=$(python3 -I -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$PROJECT_ROOT")
     if [[ "$wrangler_bin" == "$project_root" || "$wrangler_bin" == "$project_root/"* ]]; then
       echo "auth-probe: WRANGLER_BIN must be outside PROJECT_ROOT." >&2
       emit '{"status":"missing_token","reason":"project_local_wrangler"}'
     fi
   fi
-  if [ -z "${WRANGLER_VERSION:-}" ]; then
+  if [[ -z "${WRANGLER_VERSION:-}" ]]; then
     echo "auth-probe: WRANGLER_VERSION is required with WRANGLER_BIN." >&2
     emit '{"status":"missing_token","reason":"missing_wrangler_version"}'
   fi
@@ -78,13 +78,13 @@ if [ -n "${WRANGLER_BIN:-}" ]; then
     "$wrangler_bin" --version 2>/dev/null |
       python3 -I -c 'import re,sys; m=re.search(r"\b(\d+\.\d+\.\d+)\b", sys.stdin.read()); print(m.group(1) if m else "")'
   )
-  if [ "$actual_version" != "$WRANGLER_VERSION" ]; then
+  if [[ "$actual_version" != "$WRANGLER_VERSION" ]]; then
     echo "auth-probe: WRANGLER_BIN version does not match WRANGLER_VERSION." >&2
     emit '{"status":"missing_token","reason":"wrangler_version_mismatch"}'
   fi
 
   whoami_json=$(CLOUDFLARE_API_TOKEN="$token" "$wrangler_bin" whoami --json 2>/dev/null || true)
-  if [ -n "$whoami_json" ] && [ "$(printf '%s' "$whoami_json" | head -c 1)" = "{" ]; then
+  if [[ -n "$whoami_json" && "$(printf '%s' "$whoami_json" | head -c 1)" == "{" ]]; then
     accounts_json=$(printf '%s' "$whoami_json" | python3 -I -c '
 import json, sys
 try:
@@ -103,18 +103,18 @@ except Exception:
   fi
 fi
 
-if [ "$account_count" = "0" ] && [ -n "$declared_account" ]; then
+if [[ "$account_count" == "0" && -n "$declared_account" ]]; then
   # No wrangler, but user gave us an account. Trust it and skip enumeration.
   accounts_json="[{\"id\":$(python3 -I -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$declared_account")}]"
   account_count=1
 fi
 
-if [ "$account_count" = "0" ]; then
+if [[ "$account_count" == "0" ]]; then
   echo "auth-probe: could not enumerate accounts. Export CLOUDFLARE_ACCOUNT_ID or provide an approved WRANGLER_BIN and WRANGLER_VERSION." >&2
   emit '{"status":"missing_token","reason":"no_accounts"}'
 fi
 
-if [ -n "$declared_account" ]; then
+if [[ -n "$declared_account" ]]; then
   in_list=$(printf '%s' "$accounts_json" | python3 -I -c '
 import json, sys
 target = sys.argv[1]
@@ -124,7 +124,7 @@ except Exception:
     print("false"); sys.exit(0)
 print("true" if any((a or {}).get("id") == target for a in accounts) else "false")
 ' "$declared_account")
-  if [ "$in_list" != "true" ]; then
+  if [[ "$in_list" != "true" ]]; then
     echo "auth-probe: \$CLOUDFLARE_ACCOUNT_ID ($declared_account) is not one of the token's accounts." >&2
     emit "$(python3 -I -c '
 import json, sys
@@ -137,7 +137,7 @@ print(json.dumps({"status":"account_mismatch","declared":declared,"accounts":acc
 ' "$declared_account" "$accounts_json")"
   fi
   account_id="$declared_account"
-elif [ "$account_count" = "1" ]; then
+elif [[ "$account_count" == "1" ]]; then
   account_id=$(printf '%s' "$accounts_json" | python3 -I -c '
 import json, sys
 try:
@@ -145,7 +145,7 @@ try:
 except Exception:
     print("")
 ')
-  if [ -z "$account_id" ]; then
+  if [[ -z "$account_id" ]]; then
     echo "auth-probe: accounts list had one entry but no id field." >&2
     emit '{"status":"missing_token","reason":"malformed_accounts"}'
   fi
@@ -228,11 +228,11 @@ print(f"{verdict}|{created_sitekey}")
 unset probe_body probe_response
 verdict="${probe_output%%|*}"
 created_sitekey="${probe_output#*|}"
-[ "$created_sitekey" = "$probe_output" ] && created_sitekey=""
+[[ "$created_sitekey" == "$probe_output" ]] && created_sitekey=""
 
 # If the probe unexpectedly created a widget (API validation loosened),
 # DELETE it so the probe stays side-effect-free.
-if [ -n "$created_sitekey" ]; then
+if [[ -n "$created_sitekey" ]]; then
   echo "auth-probe: probe unexpectedly created widget $created_sitekey; cleaning up..." >&2
   sk_enc=$(python3 -I -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$created_sitekey")
   cleanup_code=$(

@@ -4,8 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install --no-cache-dir pip==24.3.1 && \
+    pip install --no-cache-dir --only-binary :all: --prefix=/install -r requirements.txt
 
 # ETAPA 2: Runtime de Desarrollo y Producción (Seguridad Non-Root)
 FROM python:3.12-slim-bookworm
@@ -25,7 +25,9 @@ RUN useradd -m -r -u 1001 appuser && \
 
 WORKDIR /app
 COPY --from=builder /install /usr/local
-COPY --chown=appuser:appuser . .
+COPY --chown=appuser:appuser alembic /app/alembic
+COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
+COPY --chown=appuser:appuser app /app/app
 
 USER appuser
 EXPOSE 8000
