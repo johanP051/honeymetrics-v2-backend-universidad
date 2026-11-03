@@ -3,12 +3,14 @@ Controlador de Autenticación, 2FA MFA TOTP, Sesión y Recuperación de Contrase
 HoneyMetrics Backend v2.0 (Cátedra de Ingeniería de Software - UDEC)
 """
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.api.deps import bearer_scheme, get_current_user
+from app.core.config import settings
 from app.core.permissions import get_scopes_for_role
 from app.core.rate_limit import limiter
 from app.core.security import create_access_token
@@ -174,11 +176,27 @@ def logout(
     return {"message": "Sesión cerrada exitosamente."}
 
 
+def resolve_request_origin(request: Request) -> str:
+    """Extrae el origen dinámico de la petición (Origin o Referer) con fallback a settings.FRONTEND_URL."""
+    origin = request.headers.get("origin")
+    if origin and origin.strip() and origin.strip().lower() != "null":
+        return origin.strip().rstrip("/")
+
+    referer = request.headers.get("referer")
+    if referer and referer.strip():
+        parsed = urlparse(referer.strip())
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+
+    return settings.FRONTEND_URL.rstrip("/")
+
+
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
 @limiter.limit("3/minute")
 def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """Envía correo con token para restablecer contraseña si el usuario existe."""
-    process_password_recovery(db, str(payload.email))
+    base_origin = resolve_request_origin(request)
+    process_password_recovery(db, str(payload.email), base_origin=base_origin)
     return {"message": "Si el correo existe, se envió un enlace de recuperación."}
 
 

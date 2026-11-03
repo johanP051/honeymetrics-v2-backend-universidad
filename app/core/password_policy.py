@@ -49,7 +49,7 @@ def validate_new_password(new_password: str, current_password: Optional[str] = N
     - V2.1.3: Cero reglas arbitrarias de composición obligatoria (no exige mayúsculas/números forzados).
     - V2.1.7: Denylist de contraseñas comunes/vulneradas.
     - Validación de no-repetición: no puede ser igual a la contraseña actual.
-    
+
     Retorna la contraseña normalizada.
     """
     if not isinstance(new_password, str):
