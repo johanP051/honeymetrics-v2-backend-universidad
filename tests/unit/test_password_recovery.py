@@ -136,3 +136,80 @@ def test_reset_password_reuse_returns_400(client, active_user, db_session):
         json={"token": token, "new_password": "OtraClave123"},
     )
     assert second.status_code == 400
+
+
+def test_resolve_request_origin_logic():
+    from unittest.mock import MagicMock
+    from app.api.v1.endpoints.auth_endpoints import resolve_request_origin
+    from app.core.config import settings
+
+    # Origin header present
+    req1 = MagicMock()
+    req1.headers = {"origin": "https://frontend.udec.edu.co/"}
+    assert resolve_request_origin(req1) == "https://frontend.udec.edu.co"
+
+    # Referer header present when origin absent
+    req2 = MagicMock()
+    req2.headers = {"referer": "https://portal.udec.edu.co:3000/auth/forgot?ref=email"}
+    assert resolve_request_origin(req2) == "https://portal.udec.edu.co:3000"
+
+    # Neither present -> fallback to settings.FRONTEND_URL
+    req3 = MagicMock()
+    req3.headers = {}
+    assert resolve_request_origin(req3) == settings.FRONTEND_URL.rstrip("/")
+
+    # Origin is "null" -> fallback to referer
+    req4 = MagicMock()
+    req4.headers = {"origin": "null", "referer": "https://iframe-host.com/page"}
+    assert resolve_request_origin(req4) == "https://iframe-host.com"
+
+
+def test_forgot_password_uses_dynamic_origin_header(client, active_user):
+    from unittest.mock import patch
+
+    with patch("app.services.auth_service.EmailService.send_password_reset_email") as mock_email:
+        mock_email.return_value = True
+        resp = client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": active_user.email},
+            headers={"Origin": "https://custom-portal.udec.edu.co"},
+        )
+        assert resp.status_code == 200
+        assert mock_email.called
+        kwargs = mock_email.call_args.kwargs
+        assert kwargs["email"] == active_user.email
+        assert kwargs["reset_url"].startswith("https://custom-portal.udec.edu.co/reset-password?token=")
+
+
+def test_forgot_password_uses_dynamic_referer_header(client, active_user):
+    from unittest.mock import patch
+
+    with patch("app.services.auth_service.EmailService.send_password_reset_email") as mock_email:
+        mock_email.return_value = True
+        resp = client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": active_user.email},
+            headers={"Referer": "https://portal.udec.edu.co:5173/auth/recovery?step=1"},
+        )
+        assert resp.status_code == 200
+        assert mock_email.called
+        kwargs = mock_email.call_args.kwargs
+        assert kwargs["reset_url"].startswith("https://portal.udec.edu.co:5173/reset-password?token=")
+
+
+def test_forgot_password_fallback_to_settings_frontend_url(client, active_user):
+    from unittest.mock import patch
+    from app.core.config import settings
+
+    with patch("app.services.auth_service.EmailService.send_password_reset_email") as mock_email:
+        mock_email.return_value = True
+        resp = client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": active_user.email},
+        )
+        assert resp.status_code == 200
+        assert mock_email.called
+        kwargs = mock_email.call_args.kwargs
+        expected_base = settings.FRONTEND_URL.rstrip("/")
+        assert kwargs["reset_url"].startswith(f"{expected_base}/reset-password?token=")
+

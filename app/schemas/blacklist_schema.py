@@ -7,7 +7,7 @@ import ipaddress
 class BlacklistEntryCreate(BaseModel):
     """DTO de entrada para registrar una nueva IP en la Blacklist."""
 
-    ip: str = Field(..., description="Dirección IP del atacante o IOC", example="45.148.10.151")
+    ip: str = Field(..., description="Dirección IP del atacante o IOC")
     ip_type: str = Field(default="IPv4", description="Tipo de indicador (IPv4, IPv6)")
     country: str = Field(default="Unknown", description="País de origen estimado")
     threat_score: int = Field(..., ge=0, le=100, description="Puntuación de amenaza (0 a 100)")
@@ -57,8 +57,8 @@ class BlacklistEntryResponse(BaseModel):
     threat_score: int
     category: str
     status: str
-    notes: Optional[str]
-    blocked_by_user_id: Optional[int]
+    notes: Optional[str] = None
+    blocked_by_user_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
