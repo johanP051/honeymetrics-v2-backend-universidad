@@ -6,7 +6,7 @@ RESEND_API_KEY no se encuentra configurada en el entorno.
 """
 import logging
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import resend
 
@@ -70,9 +70,16 @@ def _dispatch_email(to_email: str, subject: str, html_content: str, log_tag: str
 
 class EmailService:
     @staticmethod
-    def send_password_reset_email(email: str, token: str) -> bool:
+    def send_password_reset_email(
+        email: str,
+        token: str,
+        reset_url: Optional[str] = None,
+        base_origin: Optional[str] = None,
+    ) -> bool:
         """Envía enlace de recuperación válido 1h. Retorna True siempre salvo error Resend."""
-        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+        if not reset_url:
+            base = (base_origin or settings.FRONTEND_URL).rstrip("/")
+            reset_url = f"{base}/reset-password?token={token}"
         html_content = get_password_reset_html(reset_url)
         return _dispatch_email(
             to_email=email,
@@ -84,7 +91,7 @@ class EmailService:
     @staticmethod
     def send_welcome_email(email: str, temp_password: str, role_name: str = "Usuario") -> bool:
         """Envía credenciales temporales de bienvenida con enlace al login institucional."""
-        login_url = f"{settings.FRONTEND_URL}/login"
+        login_url = f"{settings.FRONTEND_URL.rstrip('/')}/login"
         html_content = get_welcome_email_html(
             email=email,
             temp_password=temp_password,
@@ -110,7 +117,7 @@ class EmailService:
     @staticmethod
     def send_mfa_reset_notification_email(email: str) -> bool:
         """Notifica al usuario que su 2FA fue reseteado por un administrador institucional."""
-        login_url = f"{settings.FRONTEND_URL}/login"
+        login_url = f"{settings.FRONTEND_URL.rstrip('/')}/login"
         html_content = get_mfa_reset_html(email=email, login_url=login_url)
         return _dispatch_email(
             to_email=email,

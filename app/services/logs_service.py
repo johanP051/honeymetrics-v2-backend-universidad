@@ -46,10 +46,9 @@ class LogsService:
         """
         while True:
             candidate = f"EXP-{secrets.randbelow(9000) + 1000}"
-            if db is None:
-                return candidate
-            if not db.query(LogExport).filter(LogExport.id == candidate).first():
-                return candidate
+            if db is not None and db.query(LogExport).filter(LogExport.id == candidate).first():
+                continue
+            return candidate
 
     @classmethod
     async def request_export(

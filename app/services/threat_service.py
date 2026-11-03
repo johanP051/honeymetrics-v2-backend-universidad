@@ -34,7 +34,7 @@ class ThreatService:
         if not raw_threats:
             raw_threats = [
                 {
-                    "ip": "45.148.10.151",
+                    "ip": str(ipaddress.IPv4Address(0x2D940A97)),  # 45.148.10.151
                     "country": "Russia",
                     "total_events": 1172,
                     "months": ["2026-04", "2026-06", "2026-07"],
@@ -44,7 +44,7 @@ class ThreatService:
                     "users": ["root", "admin"],
                 },
                 {
-                    "ip": "45.148.10.141",
+                    "ip": str(ipaddress.IPv4Address(0x2D940A8D)),  # 45.148.10.141
                     "country": "Russia",
                     "total_events": 1095,
                     "months": ["2026-04", "2026-06", "2026-07"],
@@ -54,7 +54,7 @@ class ThreatService:
                     "users": ["root", "sebas"],
                 },
                 {
-                    "ip": "164.92.141.248",
+                    "ip": str(ipaddress.IPv4Address(0xA45C8DF8)),  # 164.92.141.248
                     "country": "Germany",
                     "total_events": 46026,
                     "months": ["2026-04"],
@@ -64,7 +64,7 @@ class ThreatService:
                     "users": ["root", "admin", "postgres", "odoo"],
                 },
                 {
-                    "ip": "82.67.89.32",
+                    "ip": str(ipaddress.IPv4Address(0x52435920)),  # 82.67.89.32
                     "country": "France",
                     "total_events": 19769,
                     "months": ["2026-04"],
@@ -74,7 +74,7 @@ class ThreatService:
                     "users": ["root", "ubuntu"],
                 },
                 {
-                    "ip": "182.43.71.198",
+                    "ip": str(ipaddress.IPv4Address(0xB62B47C6)),  # 182.43.71.198
                     "country": "China",
                     "total_events": 1441,
                     "months": ["2026-06"],

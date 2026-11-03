@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.domain_errors import ValidationError
 from app.core.password_policy import validate_new_password
 from app.core.security import decode_access_token, hash_password, verify_password
@@ -49,7 +50,12 @@ def revoke_token(db: Session, token: str) -> None:
     db.commit()
 
 
-def process_password_recovery(db: Session, email: str) -> None:
+def process_password_recovery(
+    db: Session,
+    email: str,
+    base_origin: Optional[str] = None,
+    reset_url: Optional[str] = None,
+) -> None:
     """CWE-200: anti-enumeración. Si el correo existe, genera token de 1h y envía correo."""
     user = db.query(User).filter(User.email == email).first()
     if user is None:
@@ -60,7 +66,15 @@ def process_password_recovery(db: Session, email: str) -> None:
     user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
     db.commit()
 
-    EmailService.send_password_reset_email(email=user.email, token=token)
+    if not reset_url:
+        base = (base_origin or settings.FRONTEND_URL).rstrip("/")
+        reset_url = f"{base}/reset-password?token={token}"
+
+    EmailService.send_password_reset_email(
+        email=user.email,
+        token=token,
+        reset_url=reset_url,
+    )
 
 
 def reset_user_password(db: Session, token: str, new_password: str) -> None:

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -8,6 +9,23 @@ import httpx
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _init_wazuh_file_sync(file_path: str) -> None:
+    with open(file_path, "w", encoding="utf-8") as _:
+        pass
+
+
+def _append_hits_sync(file_path: str, hits: list, max_records: int, current_count: int) -> int:
+    added = 0
+    with open(file_path, "a", encoding="utf-8") as f:
+        for hit in hits:
+            if current_count + added >= max_records:
+                break
+            source = hit.get("_source", {})
+            f.write(json.dumps(source, ensure_ascii=False) + "\n")
+            added += 1
+    return added
 
 
 class WazuhScrollService:
@@ -61,27 +79,25 @@ class WazuhScrollService:
                 scroll_id = data.get("_scroll_id")
                 hits = data.get("hits", {}).get("hits", [])
 
-                with open(file_path, "w", encoding="utf-8") as f:
-                    while hits and extracted_count < max_records:
-                        for hit in hits:
-                            source = hit.get("_source", {})
-                            f.write(json.dumps(source, ensure_ascii=False) + "\n")
-                            extracted_count += 1
-                            if extracted_count >= max_records:
-                                break
-                        if extracted_count >= max_records:
-                            break
+                await asyncio.to_thread(_init_wazuh_file_sync, file_path)
+                while hits and extracted_count < max_records:
+                    added = await asyncio.to_thread(
+                        _append_hits_sync, file_path, hits, max_records, extracted_count
+                    )
+                    extracted_count += added
+                    if extracted_count >= max_records:
+                        break
 
-                        scroll_resp = await client.post(
-                            f"{settings.WAZUH_INDEXER_URL}/_search/scroll",
-                            auth=auth,
-                            json={"scroll": "2m", "scroll_id": scroll_id},
-                        )
-                        if scroll_resp.status_code != 200:
-                            break
-                        scroll_data = scroll_resp.json()
-                        scroll_id = scroll_data.get("_scroll_id")
-                        hits = scroll_data.get("hits", {}).get("hits", [])
+                    scroll_resp = await client.post(
+                        f"{settings.WAZUH_INDEXER_URL}/_search/scroll",
+                        auth=auth,
+                        json={"scroll": "2m", "scroll_id": scroll_id},
+                    )
+                    if scroll_resp.status_code != 200:
+                        break
+                    scroll_data = scroll_resp.json()
+                    scroll_id = scroll_data.get("_scroll_id")
+                    hits = scroll_data.get("hits", {}).get("hits", [])
 
             return file_path
         except Exception as e:

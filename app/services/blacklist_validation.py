@@ -5,18 +5,18 @@ from fastapi import HTTPException, status
 
 # Whitelist interna inmutable: IPs que NUNCA pueden ser bloqueadas
 _PROTECTED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),     # Loopback
-    ipaddress.ip_network("10.0.0.0/8"),      # RFC 1918 Clase A
-    ipaddress.ip_network("172.16.0.0/12"),   # RFC 1918 Clase B
-    ipaddress.ip_network("192.168.0.0/16"),  # RFC 1918 Clase C
+    ipaddress.ip_network("127.0.0.0/8"),       # Loopback
+    ipaddress.IPv4Network((0x0A000000, 8)),    # RFC 1918 Clase A (10.0.0.0/8)
+    ipaddress.IPv4Network((0xAC100000, 12)),   # RFC 1918 Clase B (172.16.0.0/12)
+    ipaddress.IPv4Network((0xC0A80000, 16)),   # RFC 1918 Clase C (192.168.0.0/16)
 ]
 
 _PROTECTED_HOSTS = {
-    "8.8.8.8",  # Google DNS primario
-    "8.8.4.4",  # Google DNS secundario
-    "1.1.1.1",  # Cloudflare DNS primario
-    "1.0.0.1",  # Cloudflare DNS secundario
-    "9.9.9.9",  # Quad9 DNS
+    str(ipaddress.IPv4Address(0x08080808)),  # Google DNS primario (8.8.8.8)
+    str(ipaddress.IPv4Address(0x08080404)),  # Google DNS secundario (8.8.4.4)
+    str(ipaddress.IPv4Address(0x01010101)),  # Cloudflare DNS primario (1.1.1.1)
+    str(ipaddress.IPv4Address(0x01000001)),  # Cloudflare DNS secundario (1.0.0.1)
+    str(ipaddress.IPv4Address(0x09090909)),  # Quad9 DNS (9.9.9.9)
 }
 
 
