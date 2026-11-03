@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -9,6 +10,16 @@ from app.models.log_export_model import LogExport
 from app.services.logs_streamer import LogsStreamer
 
 logger = logging.getLogger(__name__)
+
+
+def _init_file_sync(file_path: str) -> None:
+    with open(file_path, "w", encoding="utf-8") as _:
+        pass
+
+
+def _append_logs_chunk_sync(file_path: str, chunk: list) -> None:
+    with open(file_path, "a", encoding="utf-8") as f:
+        f.writelines(chunk)
 
 
 class LogsTasksService:
@@ -105,9 +116,15 @@ class LogsTasksService:
         file_path = os.path.join(cls.LOCAL_STORAGE_DIR, file_name)
 
         try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                async for log in WazuhExtractor.extract_logs_scroll(start_date, end_date):
-                    f.write(json.dumps(log, ensure_ascii=False) + "\n")
+            await asyncio.to_thread(_init_file_sync, file_path)
+            chunk = []
+            async for log in WazuhExtractor.extract_logs_scroll(start_date, end_date):
+                chunk.append(json.dumps(log, ensure_ascii=False) + "\n")
+                if len(chunk) >= 500:
+                    await asyncio.to_thread(_append_logs_chunk_sync, file_path, chunk)
+                    chunk = []
+            if chunk:
+                await asyncio.to_thread(_append_logs_chunk_sync, file_path, chunk)
 
             with SessionLocal() as bg_db:
                 record = bg_db.query(LogExport).filter(LogExport.id == export_id).first()

@@ -93,6 +93,20 @@ class AdminService:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "Un administrador no puede modificar o degradar su propio rol.")
 
         changed = False
+        if payload.first_names is not None and payload.first_names.strip():
+            user.first_names = payload.first_names.strip()
+            changed = True
+        if payload.last_names is not None and payload.last_names.strip():
+            user.last_names = payload.last_names.strip()
+            changed = True
+        if payload.email is not None and str(payload.email).strip():
+            new_email = str(payload.email).strip().lower()
+            if new_email != user.email:
+                existing = db.query(User).filter(User.email == new_email).first()
+                if existing and existing.id != user.id:
+                    raise HTTPException(status.HTTP_409_CONFLICT, f"Ya existe un usuario con el correo '{new_email}'.")
+                user.email = new_email
+                changed = True
         if payload.role_id is not None and payload.role_id != user.role_id:
             if not db.query(Role).filter(Role.id == payload.role_id).first():
                 raise HTTPException(status.HTTP_404_NOT_FOUND, f"El rol con ID {payload.role_id} no existe.")
@@ -101,6 +115,11 @@ class AdminService:
         if payload.is_active is not None and payload.is_active != user.is_active:
             user.is_active = payload.is_active
             changed = True
+        if payload.password is not None and payload.password.strip():
+            user.hashed_password = hash_password(payload.password.strip())
+            user.must_change_password = True
+            changed = True
+
         if changed:
             user.auth_version = int(getattr(user, "auth_version", 0) or 0) + 1
 
@@ -108,7 +127,11 @@ class AdminService:
         AuditService.log_event(
             db, action="ADMIN_USER_UPDATED", entity_name="users", actor_user_id=current_admin_id,
             actor_email=admin.email if admin else None, entity_id=str(user_id),
-            details={"role_id": user.role_id, "is_active": user.is_active},
+            details={
+                "role_id": user.role_id,
+                "is_active": user.is_active,
+                "password_updated": bool(payload.password and payload.password.strip()),
+            },
         )
         user.updated_at = datetime.now(timezone.utc)
         db.commit()
