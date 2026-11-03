@@ -318,6 +318,14 @@ def test_docs_hidden_in_production_with_debug_disabled():
     assert s.should_expose_docs() is False
 
 
+def test_docs_hidden_in_production_even_if_debug_true():
+    s = _mk_settings(
+        ENVIRONMENT="production", DEBUG=True,
+        WAZUH_INDEXER_URL="http://wazuh", WAZUH_INDEXER_USER="u", WAZUH_INDEXER_PASSWORD="p",
+    )
+    assert s.should_expose_docs() is False
+
+
 def test_docs_visible_in_development():
     s = _mk_settings()
     assert s.should_expose_docs() is True

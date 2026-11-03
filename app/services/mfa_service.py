@@ -7,7 +7,7 @@ import hashlib
 import io
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 
 import pyotp
 import qrcode
@@ -91,8 +91,16 @@ def verify_and_enable_mfa(db: Session, user: User, code: str) -> dict:
     }
 
 
-def disable_mfa(db: Session, user: User) -> dict:
+def disable_mfa(db: Session, user: User, payload: Optional[object] = None) -> dict:
     """Desactiva 2FA, purga códigos de respaldo, incrementa auth_version y emite nuevo JWT."""
+    if payload is not None and getattr(payload, "current_password", None):
+        from app.core.security import verify_password
+        if not verify_password(payload.current_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Contraseña actual incorrecta para deshabilitar MFA.",
+            )
+
     db.query(MFABackupCode).filter(MFABackupCode.user_id == user.id).delete()
     user.is_mfa_enabled = False
     user.totp_secret = None

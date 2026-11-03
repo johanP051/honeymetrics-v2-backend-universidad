@@ -121,10 +121,11 @@ class Settings(BaseSettings):
             return [p.strip() for p in v.split(",") if p.strip()]
         return v
 
-    # Cero Fuga de Información
-    # Cero Fuga de Información: oculta /docs, /redoc y openapi.json en producción sin DEBUG
+    # Cero Fuga de Información: oculta /docs, /redoc y openapi.json en producción o si DEBUG está desactivado
     def should_expose_docs(self) -> bool:
-        if self.ENVIRONMENT == "production" and not self.DEBUG:
+        if str(self.ENVIRONMENT).strip().lower() in {"production", "prod"}:
+            return False
+        if not self.DEBUG:
             return False
         return True
 

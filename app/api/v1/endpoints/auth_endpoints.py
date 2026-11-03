@@ -17,6 +17,7 @@ from app.models.user_model import User
 from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
+    MfaDisableRequest,
     MfaDisableResponse,
     MfaSetupResponse,
     MfaTokenResponse,
@@ -104,9 +105,13 @@ def mfa_verify(
 
 
 @router.post("/mfa/disable", response_model=MfaDisableResponse, status_code=status.HTTP_200_OK)
-def mfa_disable(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def mfa_disable(
+    payload: Optional[MfaDisableRequest] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Desactiva 2FA, purga códigos de respaldo y emite access token renovado."""
-    return disable_mfa(db, current_user)
+    return disable_mfa(db, current_user, payload)
 
 
 def _verify_login_core(payload: MfaVerifyLoginRequest, db: Session) -> TokenResponse:
