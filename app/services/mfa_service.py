@@ -7,7 +7,7 @@ import hashlib
 import io
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 
 import pyotp
 import qrcode
@@ -25,6 +25,7 @@ from app.models.audit_log_model import AuditLog
 from app.models.mfa_backup_code_model import MFABackupCode
 from app.models.revoked_token_model import RevokedToken
 from app.models.user_model import User
+from app.services.email_service import EmailService
 
 
 def _generate_backup_codes(count: int = 8) -> List[str]:
@@ -90,8 +91,16 @@ def verify_and_enable_mfa(db: Session, user: User, code: str) -> dict:
     }
 
 
-def disable_mfa(db: Session, user: User) -> dict:
+def disable_mfa(db: Session, user: User, payload: Optional[object] = None) -> dict:
     """Desactiva 2FA, purga códigos de respaldo, incrementa auth_version y emite nuevo JWT."""
+    if payload is not None and getattr(payload, "current_password", None):
+        from app.core.security import verify_password
+        if not verify_password(payload.current_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Contraseña actual incorrecta para deshabilitar MFA.",
+            )
+
     db.query(MFABackupCode).filter(MFABackupCode.user_id == user.id).delete()
     user.is_mfa_enabled = False
     user.totp_secret = None
@@ -103,6 +112,11 @@ def disable_mfa(db: Session, user: User) -> dict:
     ))
     db.commit()
     db.refresh(user)
+
+    # Correo 3 (paridad con el backend guía): aviso al usuario de que su 2FA fue desactivado.
+    # EmailService._dispatch_email nunca lanza excepciones hacia arriba: el flujo HTTP
+    # NO se rompe si Resend falla (correo defensivo, PB-HM-06.1).
+    EmailService.send_mfa_reset_notification_email(email=user.email)
 
     role_name = user.role.name if getattr(user, "role", None) else None
     user_scopes = get_scopes_for_role(role_name)

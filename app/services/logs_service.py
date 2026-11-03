@@ -1,5 +1,5 @@
 import logging
-import random
+import secrets
 from datetime import date, datetime, timezone
 from typing import List, Optional
 from fastapi import BackgroundTasks
@@ -39,6 +39,19 @@ class LogsService:
     stream_jsonl_dataset = LogsStreamer.stream_jsonl_dataset
 
     @classmethod
+    def _generate_export_id(cls, db: Optional[Session] = None) -> str:
+        """
+        Genera un export_id criptográfico (CSPRNG) y reintenta ante colisión en BD.
+        Reemplaza random.randint (Mersenne Twister, predecible) por secrets.randbelow.
+        """
+        while True:
+            candidate = f"EXP-{secrets.randbelow(9000) + 1000}"
+            if db is None:
+                return candidate
+            if not db.query(LogExport).filter(LogExport.id == candidate).first():
+                return candidate
+
+    @classmethod
     async def request_export(
         cls,
         start_date: date,
@@ -49,7 +62,7 @@ class LogsService:
         from app.services.wazuh_extractor import WazuhExtractor
 
         diff_days = (end_date - start_date).days + 1
-        export_id = f"EXP-{random.randint(1000, 9999)}"
+        export_id = cls._generate_export_id(db)
         date_range = f"{start_date} / {end_date}"
 
         if background_tasks:

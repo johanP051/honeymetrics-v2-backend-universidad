@@ -4,7 +4,9 @@ HoneyMetrics Backend v2.0 (UDEC)
 """
 from datetime import datetime
 from typing import Any, Optional
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.core.password_policy import validate_new_password
 
 
 class UserListItemResponse(BaseModel):
@@ -24,8 +26,17 @@ class UserCreateAdminRequest(BaseModel):
     first_names: str = Field(..., min_length=2)
     last_names: str = Field(..., min_length=2)
     role_id: int = Field(..., description="ID del rol a asignar")
-    temp_password: str = Field(..., min_length=8, description="Contraseña temporal")
+    temp_password: str = Field(
+        ..., min_length=12, max_length=128,
+        description="Contraseña temporal (política ASVS V2.1: 12-128 caracteres + denylist)",
+    )
     send_email: bool = Field(default=True, description="Enviar correo de bienvenida")
+
+    @field_validator("temp_password")
+    @classmethod
+    def validate_temp_password_policy(cls, v: str) -> str:
+        """OWASP ASVS 4.0.3 V2.1: 12-128 caracteres, denylist y sin composición forzada."""
+        return validate_new_password(v)
 
 
 class UserUpdateAdminRequest(BaseModel):
