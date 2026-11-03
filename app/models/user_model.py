@@ -14,6 +14,11 @@ class User(Base):
     role_id = Column(Integer, ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     must_change_password = Column(Boolean, default=True, nullable=False)
+    auth_version = Column(Integer, nullable=False, default=0, server_default="0")
+    reset_token = Column(String(255), unique=True, nullable=True)
+    reset_token_expires = Column(DateTime, nullable=True)
+    totp_secret = Column(String(255), nullable=True)
+    is_mfa_enabled = Column(Boolean, default=False, nullable=False)
     created_at = Column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),
@@ -28,4 +33,10 @@ class User(Base):
 
     role = relationship(
         "Role", back_populates="users"
-    )  # Esto permite user.role,  backpopulates permite la relacion bidireccional de Users.role <---> Role.users
+    )
+    backup_codes = relationship(
+        "MFABackupCode",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

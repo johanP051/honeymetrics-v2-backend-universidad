@@ -7,68 +7,51 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
-from app.models.user import User
-from app.core.security import get_password_hash
+from app.models.role_model import Role
+from app.models.user_model import User
+from app.core.security import hash_password
 
 
 async def seed_data():
     """Inicializa tablas y crea usuarios base para desarrollo y sustentación."""
+    seed_password = os.getenv("SEED_ADMIN_PASSWORD")
+    if not seed_password:
+        raise RuntimeError("SEED_ADMIN_PASSWORD es obligatorio para ejecutar el seed.")
+
     print("Creando tablas si no existen...")
     Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()
     try:
-        # 1. Usuario Administrador Institucional (Johan)
-        sebas_email = "jsebastianposada@ucundinamarca.edu.co"
-        sebas_user = db.query(User).filter(User.email == sebas_email).first()
-        if not sebas_user:
-            sebas_user = User(
-                email=sebas_email,
-                full_name="Johan Sebastián Posada Beltrán",
-                hashed_password=get_password_hash("Admin123!"),
-                role="admin",
-                is_active=True,
-                must_change_password=False,
-            )
-            db.add(sebas_user)
-            db.commit()
-            print(f"✅ Usuario creado: {sebas_email}")
-        else:
-            print(f"ℹ️ Usuario {sebas_email} ya existe.")
+        admin_role = db.query(Role).filter(Role.name == "admin").first()
+        if admin_role is None:
+            admin_role = Role(name="admin", description="Administrador del sistema")
+            db.add(admin_role)
+            db.flush()
 
-        # 2. Usuario Compañero (Juan Pablo)
-        juan_email = "jpablofonseca@ucundinamarca.edu.co"
-        juan_user = db.query(User).filter(User.email == juan_email).first()
-        if not juan_user:
-            juan_user = User(
-                email=juan_email,
-                full_name="Juan Pablo Fonseca Celis",
-                hashed_password=get_password_hash("Admin123!"),
-                role="admin",
-                is_active=True,
-                must_change_password=False,
-            )
-            db.add(juan_user)
-            db.commit()
-            print(f"✅ Usuario creado: {juan_email}")
-        else:
-            print(f"ℹ️ Usuario {juan_email} ya existe.")
-
-        # 3. Usuario de Prueba Rápida (demo / testing)
-        demo_email = "admin@honeymetrics.com"
-        demo_user = db.query(User).filter(User.email == demo_email).first()
-        if not demo_user:
-            demo_user = User(
-                email=demo_email,
-                full_name="Administrador de Pruebas",
-                hashed_password=get_password_hash("Admin123!"),
-                role="admin",
-                is_active=True,
-                must_change_password=False,
-            )
-            db.add(demo_user)
-            db.commit()
-            print(f"✅ Usuario de prueba creado: {demo_email}")
+        seed_users = (
+            ("jsebastianposada@ucundinamarca.edu.co", "Johan Sebastián Posada Beltrán"),
+            ("jpablofonseca@ucundinamarca.edu.co", "Juan Pablo Fonseca Celis"),
+            ("admin@honeymetrics.com", "Administrador de Pruebas"),
+        )
+        for email, full_name in seed_users:
+            first_names, _, last_names = full_name.partition(" ")
+            user = db.query(User).filter(User.email == email).first()
+            if user is None:
+                user = User(
+                    email=email,
+                    first_names=first_names,
+                    last_names=last_names or first_names,
+                    hashed_password=hash_password(seed_password),
+                    role_id=admin_role.id,
+                    is_active=True,
+                    must_change_password=False,
+                )
+                db.add(user)
+                print(f"Usuario creado: {email}")
+            else:
+                print(f"Usuario {email} ya existe.")
+        db.commit()
     finally:
         db.close()
 

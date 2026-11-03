@@ -1,35 +1,132 @@
-from passlib.context import CryptContext
-
+import base64
+import hashlib
+import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional, Union
+
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+    _HAS_CRYPTOGRAPHY = True
+except ImportError:
+    Fernet = None
+    InvalidToken = Exception
+    _HAS_CRYPTOGRAPHY = False
+
+from passlib.context import CryptContext
 import jwt
 from app.core.config import settings
 
-pwd_context = CryptContext(
-    schemes=["argon2"], deprecated="auto"
-)  # crea un admin de contrasenas llamado pwd_context y se configura para generar y verificar hashes usando Argon2
+# Gestor de contraseñas con Argon2 (inmune al límite de 72 bytes)
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
-    hashed_password = pwd_context.hash(password)
-    return hashed_password
+    """Genera hash seguro de contraseña usando Argon2."""
+    return pwd_context.hash(password)
 
 
-def verify_password(password: str, hashed_password: str) -> bool:
-    passwd_validation = pwd_context.verify(password, hashed_password)
-    return passwd_validation
+get_password_hash = hash_password
 
 
-def create_access_token(subject: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verifica una contraseña contra su hash Argon2."""
+    return pwd_context.verify(plain_password, hashed_password)
 
-    to_encode = {"sub": str(subject), "exp": expire}
 
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+def _get_fernet() -> Optional[object]:
+    """Genera o retorna instancia de Fernet derivada determinísticamente de SECRET_KEY."""
+    if not _HAS_CRYPTOGRAPHY or Fernet is None:
+        return None
+    secret_bytes = settings.SECRET_KEY.encode("utf-8")
+    derived_key = base64.urlsafe_b64encode(hashlib.sha256(secret_bytes).digest())
+    return Fernet(derived_key)
 
+
+def encrypt_totp_secret(secret: str) -> str:
+    """Cifra el secreto TOTP en reposo usando Fernet derivado de SECRET_KEY."""
+    if not secret:
+        return secret
+    fernet = _get_fernet()
+    if fernet is None:
+        return secret
+    return fernet.encrypt(secret.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_totp_secret(token: str) -> str:
+    """
+    Descifra el secreto TOTP. Si ya es texto base32 plano (legacy) o no hay Fernet,
+    captura la excepción y lo retorna directamente para compatibilidad retroactiva.
+    """
+    if not token:
+        return token
+    fernet = _get_fernet()
+    if fernet is None:
+        return token
+    try:
+        return fernet.decrypt(token.encode("utf-8")).decode("utf-8")
+    except (InvalidToken, Exception):
+        return token
+
+
+def create_access_token(
+    subject: Union[str, int, dict],
+    expires_delta: Optional[timedelta] = None,
+    scopes: Optional[list[str]] = None,
+    auth_version: int = 0,
+    mfa_pending: bool = False,
+    role: Optional[str] = None,
+) -> str:
+    """
+    Genera un JWT firmado con HS256. Soporta subject como str/int o dict de payload.
+    Incluye jti único, exp, scopes, auth_version, role, role_name y opcionalmente mfa_pending.
+    """
+    if expires_delta is not None:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    if isinstance(subject, dict):
+        to_encode = subject.copy()
+        to_encode.setdefault("exp", expire)
+        to_encode.setdefault("jti", uuid.uuid4().hex)
+        if scopes is not None:
+            to_encode["scopes"] = scopes
+        elif "scopes" not in to_encode:
+            to_encode["scopes"] = []
+        if "auth_version" not in to_encode:
+            to_encode["auth_version"] = auth_version
+        if role is not None:
+            to_encode["role"] = role
+            to_encode["role_name"] = role
+        elif "role" in to_encode and "role_name" not in to_encode:
+            to_encode["role_name"] = to_encode["role"]
+        elif "role_name" in to_encode and "role" not in to_encode:
+            to_encode["role"] = to_encode["role_name"]
+        if mfa_pending:
+            to_encode["mfa_pending"] = True
+    else:
+        to_encode = {
+            "sub": str(subject),
+            "exp": expire,
+            "jti": uuid.uuid4().hex,
+            "scopes": scopes or [],
+            "auth_version": auth_version,
+        }
+        if role is not None:
+            to_encode["role"] = role
+            to_encode["role_name"] = role
+        if mfa_pending:
+            to_encode["mfa_pending"] = True
+
+    encoded_jwt = jwt.encode(
+        to_encode,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
     return encoded_jwt
 
 
-def decode_access_token(token: str) -> dict | None:
+def decode_access_token(token: str) -> Optional[dict]:
     """
     Decodifica y valida un JWT. Retorna el payload si es válido,
     o None si el token es inválido, expirado o malformado.

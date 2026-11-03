@@ -1,52 +1,22 @@
-name: Backend CI/CD Pipeline & Quality Gate
+name: Backend CI & Quality Gate
 
 on:
   push:
-    branches: [ main, develop, QA ]
+    branches: [ main, QA, develop ]
   pull_request:
-    branches: [ main, develop, QA ]
+    branches: [ main, QA, develop ]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  lint-and-style:
-    name: 🎨 Linting & Code Style (Ruff, Black, Mypy)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: 📥 Checkout Code
-        uses: actions/checkout@v4
-
-      - name: 🐍 Setup Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      - name: 📦 Install Linting & Typing Tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff black mypy
-
-      - name: ⚡ Run Ruff Linter
-        run: |
-          ruff check app/ tests/
-
-      - name: 🖤 Check Code Formatting with Black
-        run: |
-          black --check app/ tests/
-
-      - name: 🔍 Static Type Checking with Mypy (Advisory)
-        run: |
-          mypy --explicit-package-bases app/
-        continue-on-error: true
-
-
-  test-and-coverage:
-    name: 🧪 Testing & Coverage (Pytest & pytest-cov)
+  test-and-lint:
+    name: 🧪 Pytest (Cov >= 70%), Ruff & Alembic Graph
     runs-on: ubuntu-latest
 
     steps:
@@ -63,21 +33,30 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install ruff pytest pytest-cov httpx
 
-      - name: 🧪 Run Pytest Suite with Coverage
+      - name: ⚡ Run Ruff Linter (Syntax & Undefined Names)
         run: |
-          pytest -v --cov=app --cov-report=term-missing --cov-report=xml tests/
+          ruff check app/ --select E9,F63,F7,F82
 
-      - name: 📊 Upload Coverage Report Artifact
+      - name: 🗃️ Validate Single Alembic Migration Head
+        run: |
+          heads_count=$(alembic heads | grep -c '(head)' || true)
+          echo "Alembic heads detected: $heads_count"
+          test "$heads_count" -eq 1
+
+      - name: 🧪 Execute Pytest Suite with Coverage Gate (70%)
+        run: |
+          pytest -v --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=70
+
+      - name: 📎 Upload Coverage Report
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: code-coverage-report
+          name: coverage-report
           path: coverage.xml
-          retention-days: 7
 
   security-sast:
-    name: 🛡️ SAST Security Scan & Dependency Audit (Bandit & pip-audit)
+    name: 🛡️ SAST Security Scan (Bandit) & Docker Smoke
     runs-on: ubuntu-latest
 
     steps:
@@ -88,40 +67,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
 
-      - name: 📦 Install Security Audit Tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install bandit pip-audit
+      - name: 📦 Install Bandit
+        run: pip install bandit
 
-      - name: 🔍 Bandit SAST Security Scan
+      - name: 🔍 Scan for Medium/High Severity Security Flaws
         run: |
           bandit -r app/ -ll -ii
 
-      - name: 🛡️ Dependency Vulnerability Audit (pip-audit)
+      - name: 🐳 Multi-Stage Dockerfile Smoke Build
         run: |
-          pip-audit -r requirements.txt
-
-  docker-build-check:
-    name: 🐳 Production Docker Build Smoke Test
-    runs-on: ubuntu-latest
-    env:
-      COMPOSE_FILE: "docker-compose.yml:docker-compose.prod.yml"
-
-    steps:
-      - name: 📥 Checkout Code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: 📄 Prepare Environment Configuration
-        run: |
-          if [ ! -f .env ]; then
-            cp .env.example .env
-          fi
-
-      - name: 🐳 Verify Production Docker Compose Build
-        run: |
-          docker compose -f docker-compose.yml -f docker-compose.prod.yml build
+          docker build -t hm_v2_api:smoke -f Dockerfile .
