@@ -1,11 +1,9 @@
 """
-Endpoints del Threat Intelligence Center — Blacklist CRUD.
-Todos los endpoints de escritura (POST, PUT, DELETE) requieren rol Administrador.
+Endpoints del Threat Intelligence Center — Blacklist CRUD y Bóveda Forense.
 """
 
 from typing import List
-
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Security, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_admin_user
@@ -16,14 +14,19 @@ from app.schemas.blacklist_schema import (
     BlacklistEntryUpdate,
     BlacklistEntryResponse,
 )
+from app.schemas.threat_schema import BlacklistVaultResponse
 from app.services.blacklist_service import BlacklistService
 
 router = APIRouter(
-    prefix="/blacklist",
     tags=["Blacklist — Threat Center CRUD"],
 )
 
 
+@router.get(
+    "",
+    include_in_schema=False,
+    response_model=List[BlacklistEntryResponse],
+)
 @router.get(
     "/",
     response_model=List[BlacklistEntryResponse],
@@ -33,13 +36,34 @@ def list_blacklist(
     _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> List[BlacklistEntryResponse]:
-    """
-    Retorna la lista completa de IPs registradas en el Threat Intelligence Center,
-    ordenadas por threat_score descendente. Requiere estar autenticado.
-    """
+    """Retorna la lista completa de IPs registradas en el Threat Intelligence Center."""
     return BlacklistService.get_all(db)
 
 
+@router.get(
+    "/vault",
+    response_model=List[BlacklistVaultResponse],
+    summary="Consultar Bóveda Forense de Lista Negra",
+)
+def get_blacklist_vault(
+    limit: int = Query(100, ge=1, le=500, description="Límite de registros a retornar"),
+    offset: int = Query(0, ge=0, description="Offset de paginación"),
+    _current_user: User = Security(get_current_user, scopes=["blacklist:read"]),
+    db: Session = Depends(get_db),
+) -> List[BlacklistVaultResponse]:
+    """
+    Retorna los registros archivados en la Bóveda Forense Inmutable de Lista Negra
+    con paginación. Requiere scope 'blacklist:read'.
+    """
+    return BlacklistService.get_vault(db=db, limit=limit, offset=offset)
+
+
+@router.post(
+    "",
+    include_in_schema=False,
+    response_model=BlacklistEntryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 @router.post(
     "/",
     response_model=BlacklistEntryResponse,
@@ -51,12 +75,7 @@ def create_blacklist_entry(
     current_admin: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> BlacklistEntryResponse:
-    """
-    Registra una nueva IP en el Threat Intelligence Center.
-    Aplica validación de Whitelist interna (RFC 1918, DNS públicos, loopback)
-    y auto-calcula el status según el threat_score (> 70 → "Bloqueada").
-    Requiere rol Administrador.
-    """
+    """Registra una nueva IP en la Blacklist aplicando invariantes y PoLP."""
     return BlacklistService.create(payload, db, admin_user_id=current_admin.id)
 
 
@@ -71,11 +90,7 @@ def update_blacklist_entry(
     _current_admin: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> BlacklistEntryResponse:
-    """
-    Actualiza campos de una IP existente en la Blacklist.
-    Si se modifica el threat_score, recalcula el status automáticamente.
-    Requiere rol Administrador.
-    """
+    """Actualiza campos de una IP existente en la Blacklist."""
     return BlacklistService.update(entry_id, payload, db)
 
 
@@ -86,12 +101,12 @@ def update_blacklist_entry(
 )
 def delete_blacklist_entry(
     entry_id: int,
-    _current_admin: User = Depends(require_admin_user),
+    current_admin: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> dict:
     """
-    Elimina permanentemente una entrada del Threat Intelligence Center.
+    Elimina permanentemente una entrada de la Blacklist y la archiva en la Bóveda Forense.
     Requiere rol Administrador.
     """
-    BlacklistService.delete(entry_id, db)
+    BlacklistService.delete(entry_id, db, deleted_by_user_id=current_admin.id)
     return {"message": f"Entrada ID {entry_id} eliminada de la Blacklist exitosamente."}

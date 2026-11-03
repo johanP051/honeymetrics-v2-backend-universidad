@@ -28,6 +28,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      # Datasets JSONL reales de Wazuh (solo lectura) para descargas nunca vacías:
+      # GET /api/v1/logs/download/{id} puede transmitir desde /app/datasets_wazuh
+      - /media/sebas/Exdrive/Workspace/HoneyMetrics/core/media/downloads:/app/datasets_wazuh:ro
     networks:
       - hm_v2_network
 

@@ -1,10 +1,14 @@
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.core.rate_limit import setup_rate_limiting
 from app.api.v1.router import api_router
 from app.db.base import Base
 from app.db.session import engine
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 
 @asynccontextmanager
@@ -19,9 +23,9 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     description="API REST de Inteligencia de Amenazas y Telemetría Honeypot (Cátedra de Ingeniería de Software - UDEC Facatativá).",
     version=settings.VERSION,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json" if settings.should_expose_docs() else None,
+    docs_url="/docs" if settings.should_expose_docs() else None,
+    redoc_url="/redoc" if settings.should_expose_docs() else None,
     lifespan=lifespan,
 )
 
@@ -35,6 +39,20 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
+# Inyección de cabeceras de seguridad HTTP
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+# Rate Limiting slowapi (anti fuerza bruta), activo en login/mfa/forgot-password
+setup_rate_limiting(app)
+
 # Montaje de rutas modulares bajo prefijo /api/v1
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
@@ -45,6 +63,6 @@ async def root():
     return {
         "message": f"Bienvenido a {settings.PROJECT_NAME}",
         "version": settings.VERSION,
-        "docs": "/docs",
+        "docs": "/docs" if settings.should_expose_docs() else "disabled",
         "health": f"{settings.API_V1_STR}/health",
     }

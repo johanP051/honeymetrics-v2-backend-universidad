@@ -1,3 +1,4 @@
+import hmac
 from typing import List
 from fastapi import (
     APIRouter,
@@ -12,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.schemas.log_export_schema import (
     LogExportItemResponse,
@@ -20,6 +22,7 @@ from app.schemas.log_export_schema import (
     LogReportStatsResponse,
 )
 from app.services.logs_service import LogsService
+from app.services.logs_streamer import LogsStreamer
 from app.services.telegram_service import TelegramService
 
 router = APIRouter(prefix="/logs", tags=["Logs & Export"])
@@ -31,7 +34,10 @@ router = APIRouter(prefix="/logs", tags=["Logs & Export"])
     status_code=status.HTTP_200_OK,
     summary="Obtener historial persistente de exportaciones de logs",
 )
-def get_logs_history(db: Session = Depends(get_db)) -> List[LogExportItemResponse]:
+def get_logs_history(
+    db: Session = Depends(get_db),
+    _current_user=Depends(get_current_user),
+) -> List[LogExportItemResponse]:
     """
     Retorna la lista de todas las exportaciones registradas en base de datos.
     Si la base de datos está vacía, puebla automáticamente los registros de referencia.
@@ -49,6 +55,7 @@ async def request_log_export(
     payload: LogExportRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    _current_user=Depends(get_current_user),
 ) -> LogExportResponse:
     """
     Registra una solicitud de extracción de logs crudos en Base de Datos.
@@ -84,12 +91,19 @@ async def telegram_webhook(
     Recibe las notificaciones de Telegram. Si incluye callback_query (clic en Aprobar/Rechazar),
     procesa la autorización, actualiza el estado en Base de Datos y actualiza el mensaje en el chat.
     """
-    if settings.TELEGRAM_WEBHOOK_SECRET and x_telegram_bot_api_secret_token:
-        if x_telegram_bot_api_secret_token != settings.TELEGRAM_WEBHOOK_SECRET:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Token secreto de webhook inválido.",
-            )
+    if not settings.TELEGRAM_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook de Telegram no configurado en el servidor.",
+        )
+
+    if not x_telegram_bot_api_secret_token or not hmac.compare_digest(
+        x_telegram_bot_api_secret_token, settings.TELEGRAM_WEBHOOK_SECRET
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Token secreto de webhook inválido.",
+        )
 
     body = await request.json()
 
@@ -113,6 +127,7 @@ async def telegram_webhook(
 def download_log_export(
     export_id: str,
     db: Session = Depends(get_db),
+    _current_user=Depends(get_current_user),
 ):
     """
     Descarga por streaming el archivo JSONL para una exportación en estado 'Listo'.
@@ -129,6 +144,14 @@ def download_log_export(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"La exportación '{export_id}' se encuentra en estado '{record.status}'. Debe estar 'Listo' para su descarga.",
+        )
+
+    # Anti-archivo-vacío: si no existe ninguna fuente real (disco ni Indexer)
+    # se responde 503 ANTES de iniciar el stream, jamás un .jsonl de 0 bytes.
+    if not LogsStreamer.has_real_source(record):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"La exportación '{export_id}' no tiene datasets reales disponibles en este momento. Intenta de nuevo más tarde.",
         )
 
     filename = f"honeymetrics_{export_id}.jsonl"
@@ -151,17 +174,19 @@ def download_log_export(
     status_code=status.HTTP_200_OK,
     summary="Obtener estadísticas y agregaciones de decoders para reporte PDF",
 )
-def get_report_stats(
+async def get_report_stats(
     export_id: str,
     db: Session = Depends(get_db),
+    _current_user=Depends(get_current_user),
 ) -> LogReportStatsResponse:
     """
     Retorna métricas agregadas por decoders de Wazuh para esquematizar el reporte técnico.
     """
-    stats = LogsService.get_report_stats(export_id=export_id, db=db)
+    stats = await LogsService.get_report_stats(export_id=export_id, db=db)
     if not stats:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"La exportación '{export_id}' no existe.",
         )
     return stats
+
