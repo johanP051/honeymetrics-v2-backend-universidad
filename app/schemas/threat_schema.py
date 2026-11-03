@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class AttackerIPSchema(BaseModel):
     """Esquema de representación de una IP atacante identificada por telemetría CTI."""
 
-    ip: str = Field(..., examples=["164.92.141.248"], description="Dirección IP del atacante")
+    ip: str = Field(..., description="Dirección IP del atacante")
     country: str = Field(default="Unknown", description="País de origen del atacante")
     total_events: int = Field(..., examples=[46026], description="Total de intentos/eventos registrados")
     threat_score: int = Field(..., ge=0, le=100, examples=[93], description="Puntuación de amenaza (0 a 100)")
@@ -37,7 +37,7 @@ class AttackerIPSchema(BaseModel):
 class BotnetSubnetSchema(BaseModel):
     """Esquema de subred sospechosa de operar como botnet coordinada."""
 
-    subnet: str = Field(..., examples=["45.148.10.0/24"], description="Subred CIDR identificada")
+    subnet: str = Field(..., description="Subred CIDR identificada")
     total_events: int = Field(..., examples=[5613], description="Total de eventos originados en el prefijo")
     distinct_ips_count: int = Field(..., examples=[7], description="Cantidad de nodos atacantes únicos")
     sample_ips: List[str] = Field(default_factory=list, description="Muestra representativa de IPs atacantes")

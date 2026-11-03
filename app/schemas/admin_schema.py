@@ -40,8 +40,22 @@ class UserCreateAdminRequest(BaseModel):
 
 
 class UserUpdateAdminRequest(BaseModel):
+    first_names: Optional[str] = Field(default=None, min_length=2, max_length=150)
+    last_names: Optional[str] = Field(default=None, min_length=2, max_length=150)
+    email: Optional[EmailStr] = Field(default=None)
     role_id: Optional[int] = Field(default=None)
     is_active: Optional[bool] = Field(default=None)
+    password: Optional[str] = Field(
+        default=None, min_length=12, max_length=128,
+        description="Nueva contraseña opcional asignada por admin (ASVS V2.1)",
+    )
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_policy(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v.strip():
+            return validate_new_password(v)
+        return None
 
 
 class AuditLogResponse(BaseModel):

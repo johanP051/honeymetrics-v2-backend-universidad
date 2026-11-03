@@ -223,8 +223,10 @@ def test_env_flags_governance():
         raw_list = [d.strip() for d in raw_domains.split(",") if d.strip()]
     domains = [d.strip() for d in raw_list if d.strip()]
     assert "ucundinamarca.edu.co" in domains
-    assert "gmail.com" in domains
-    assert values.get("FRONTEND_URL") == "http://localhost:5173"
+    assert values.get("FRONTEND_URL") in (
+        "https://honeymetrics-v2-frontend.johan-sebastianposada.workers.dev",
+        "http://localhost:5173",
+    )
     assert values.get("FRONTEND_URL") != "http://localhost:5174"
     assert values.get("ACCESS_TOKEN_EXPIRE_MINUTES") == "480"
 

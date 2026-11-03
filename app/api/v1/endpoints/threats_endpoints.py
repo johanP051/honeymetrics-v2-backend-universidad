@@ -49,7 +49,7 @@ async def health_check() -> HealthResponseSchema:
     from app.services.wazuh_extractor import WazuhExtractor
     is_online = await WazuhExtractor.check_connection()
     status_val = "healthy" if is_online else "degraded"
-    
+
     return HealthResponseSchema(
         status=status_val,
         service=settings.PROJECT_NAME,

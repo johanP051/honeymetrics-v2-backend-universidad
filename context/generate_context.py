@@ -8,6 +8,7 @@ import hashlib
 import os
 import re
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,7 +30,7 @@ CRITICAL_NAMES = {
 SECRET_PATTERNS = [
     (re.compile(r"-----BEGIN [^-]+ PRIVATE KEY-----.*?-----END [^-]+ PRIVATE KEY-----", re.I | re.S), "[REDACTED_PRIVATE_KEY]"),
     (re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{16,}"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)https?://[^\s/@]+:[^\s/@]+@"), "[REDACTED_URL_CREDENTIALS]@"),
+    (re.compile(r"(?i)https?://[^\s/:@]+:[^\s/@]+@"), "[REDACTED_URL_CREDENTIALS]@"),
     (re.compile(r'''(?i)(["']?(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key)["']?\s*[:=]\s*["']?)([^\s,"'}]+)'''), r"\1[REDACTED]"),
     (re.compile(r"\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9._-]{10,}\.[A-Za-z0-9._-]{10,}\b"), "[REDACTED_JWT]"),
     (re.compile(r"\b(?:ghp|github_pat|sk|xox[baprs])_[A-Za-z0-9_-]{12,}\b"), "[REDACTED_TOKEN]"),
@@ -43,7 +44,7 @@ def git_value(root: Path, *args: str) -> str:
         return "unknown"
 
 def sanitize(text: str) -> tuple[str, int]:
-    text, count = re.subn(r"(?im)^.*(?:password|contraseña|credential|credencial).*$", "[REDACTED_CREDENTIAL_LINE]", text)
+    text, count = re.subn(r"(?im)^[^\r\n]*(?:password|contraseña|credential|credencial)[^\r\n]*$", "[REDACTED_CREDENTIAL_LINE]", text)
     for pattern, replacement in SECRET_PATTERNS:
         text, found = pattern.subn(replacement, text)
         count += found
@@ -103,7 +104,7 @@ def main() -> int:
             raise SystemExit(f"Output already exists: {output}. Use --overwrite only when intentional.")
     else:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        output = (Path("/tmp") / "honeymetrics_context" / root.name / f"contexto_{root.name}_{stamp}.txt").resolve()
+        output = (Path(tempfile.gettempdir()) / "honeymetrics_context" / root.name / f"contexto_{root.name}_{stamp}.txt").resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     chunks = [
         "# HONEYMETRICS — CONTEXTO SANITIZADO PARA AUDITORÍA",
