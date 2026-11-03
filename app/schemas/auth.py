@@ -48,17 +48,22 @@ class MfaVerifyRequest(BaseModel):
     code: str = Field(..., min_length=6, max_length=6, description="Código TOTP de 6 dígitos")
 
 
+class MfaDisableRequest(BaseModel):
+    current_password: Optional[str] = Field(None, description="Contraseña actual requerida para reautenticación")
+    code: Optional[str] = Field(None, description="Código numérico TOTP opcional")
+
+
 class MfaVerifyResponse(BaseModel):
-    message: str
-    backup_codes: List[str] = []
-    access_token: str
-    token_type: Literal["bearer"] = "bearer"
+    message: str = "Autenticación de dos factores activada exitosamente."
+    backup_codes: Optional[List[str]] = []
+    access_token: Optional[str] = None
+    token_type: Optional[str] = "bearer"
 
 
 class MfaDisableResponse(BaseModel):
-    message: str
-    access_token: str
-    token_type: Literal["bearer"] = "bearer"
+    message: str = "Autenticación de dos factores (2FA) desactivada exitosamente."
+    access_token: Optional[str] = None
+    token_type: Optional[str] = "bearer"
 
 
 class MfaVerifyLoginRequest(BaseModel):

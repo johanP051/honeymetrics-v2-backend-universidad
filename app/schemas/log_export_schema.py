@@ -1,6 +1,9 @@
 from datetime import date
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+# Límite máximo de rango de exportación (prevención DoS / overflow de fechas)
+MAX_EXPORT_RANGE_DAYS = 365
 
 
 class LogExportRequest(BaseModel):
@@ -8,6 +11,17 @@ class LogExportRequest(BaseModel):
     end_date: date = Field(..., alias="endDate", description="Fecha de fin de extracción (YYYY-MM-DD)")
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_date_window(self) -> "LogExportRequest":
+        """Anti-DoS: rechaza rangos invertidos, fechas futuras y ventanas > 365 días."""
+        if self.start_date > self.end_date:
+            raise ValueError("La fecha de inicio debe ser anterior o igual a la fecha de fin.")
+        if self.end_date > date.today():
+            raise ValueError("No se puede exportar logs de fechas futuras (endDate no puede estar en el futuro).")
+        if (self.end_date - self.start_date).days >= MAX_EXPORT_RANGE_DAYS:
+            raise ValueError(f"El rango de exportación no puede exceder {MAX_EXPORT_RANGE_DAYS} días.")
+        return self
 
 
 class LogExportResponse(BaseModel):

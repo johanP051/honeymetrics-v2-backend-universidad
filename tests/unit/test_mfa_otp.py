@@ -14,6 +14,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from unittest.mock import patch
 
 from app.db.base import Base
 from app.db.session import get_db
@@ -179,8 +180,12 @@ def test_mfa_disable_stops_requiring_otp(client, active_user, db_session):
 
     # Utiliza el token renovado con el nuevo auth_version emitido al activar 2FA
     active_token = resp_verify.json().get("access_token", token)
-    disable = client.post("/api/v1/auth/mfa/disable", headers=_auth(active_token))
-    assert disable.status_code == 200
+    with patch("app.services.mfa_service.EmailService.send_mfa_reset_notification_email") as mock_mfa_email:
+        disable = client.post("/api/v1/auth/mfa/disable", headers=_auth(active_token))
+        assert disable.status_code == 200
+        # Correo 3 de paridad: aviso de desactivación de 2FA al usuario
+        mock_mfa_email.assert_called_once()
+        assert mock_mfa_email.call_args.kwargs.get("email") == "mfa@ucundinamarca.edu.co"
     db_session.refresh(active_user)
     assert active_user.is_mfa_enabled is False
     assert active_user.totp_secret is None
