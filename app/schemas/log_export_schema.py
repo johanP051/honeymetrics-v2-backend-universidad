@@ -26,7 +26,7 @@ class LogExportRequest(BaseModel):
 
 class LogExportResponse(BaseModel):
     id: str = Field(..., description="Identificador correlativo de la exportación (ej. EXP-1045)")
-    status: Literal["Listo", "Procesando", "Pendiente de Aprobación", "Rechazada"] = Field(
+    status: Literal["Listo", "Procesando", "Pendiente de Aprobación", "Rechazada", "Expirado"] = Field(
         ..., description="Estado de la solicitud de exportación"
     )
     count: int = Field(..., description="Cantidad estimada o real de logs a procesar")
@@ -37,7 +37,7 @@ class LogExportItemResponse(BaseModel):
     id: str = Field(..., description="Identificador de la exportación (ej. EXP-1045)")
     date_range: str = Field(..., description="Rango de fechas legible")
     count: int = Field(..., description="Cantidad de registros")
-    status: Literal["Listo", "Procesando", "Pendiente de Aprobación", "Rechazada"] = Field(
+    status: Literal["Listo", "Procesando", "Pendiente de Aprobación", "Rechazada", "Expirado"] = Field(
         ..., description="Estado actual de la exportación"
     )
     created_at: str = Field(..., description="Fecha y hora de solicitud formateada para presentación")

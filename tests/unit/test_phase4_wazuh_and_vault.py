@@ -140,15 +140,19 @@ def test_get_blacklist_vault_endpoint(client, phase4_db):
         cr = client.post("/api/v1/threats/blacklist/", headers=headers_admin, json={"ip": ip, "threat_score": score, "category": "Scanner"})
         client.delete(f"/api/v1/threats/blacklist/{cr.json()['id']}", headers=headers_admin)
 
-    # Consulta por Analista (tiene scope blacklist:read)
-    vault_resp = client.get("/api/v1/threats/blacklist/vault?limit=10&offset=0", headers=headers_analyst)
+    # Consulta por Admin (tiene scope blacklist:read / admin:all)
+    vault_resp = client.get("/api/v1/threats/blacklist/vault?limit=10&offset=0", headers=headers_admin)
     assert vault_resp.status_code == 200
     data = vault_resp.json()
     assert len(data) >= 2
     assert "original_ip" in data[0]
     assert "threat_score" in data[0]
 
-    # Alias /api/v1/blacklist/vault
-    alias_resp = client.get("/api/v1/blacklist/vault?limit=1", headers=headers_analyst)
+    # Alias /api/v1/blacklist/vault permitido para Admin
+    alias_resp = client.get("/api/v1/blacklist/vault?limit=1", headers=headers_admin)
     assert alias_resp.status_code == 200
     assert len(alias_resp.json()) == 1
+
+    # Analista no participa en CU03 Lista Negra -> debe recibir 403 Forbidden
+    forbidden_resp = client.get("/api/v1/threats/blacklist/vault?limit=10&offset=0", headers=headers_analyst)
+    assert forbidden_resp.status_code == 403
