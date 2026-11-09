@@ -18,19 +18,21 @@ ROLES_TO_SCOPES: Dict[str, List[str]] = {
         "blacklist:read",
         "blacklist:write",
         "users:profile",
+        "admin:users",
+        "admin:audit",
         "admin:all",
-    ],
-    "Analista": [
-        "dashboard:read",
-        "threats:read",
-        "logs:read",
-        "logs:export",
-        "blacklist:read",
-        "users:profile",
     ],
     "Consultor": [
         "dashboard:read",
         "threats:read",
+        "threats:write",
+        "threats:delete",
+        "blacklist:read",
+        "blacklist:write",
+        "users:profile",
+    ],
+    "Analista": [
+        "dashboard:read",
         "logs:read",
         "logs:export",
         "users:profile",
@@ -38,7 +40,7 @@ ROLES_TO_SCOPES: Dict[str, List[str]] = {
     "Directivo": [
         "dashboard:read",
         "threats:read",
-        "logs:read",
+        "blacklist:read",
         "users:profile",
     ],
 }

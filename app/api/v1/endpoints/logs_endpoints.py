@@ -7,6 +7,7 @@ from fastapi import (
     Header,
     HTTPException,
     Request,
+    Security,
     status,
 )
 from fastapi.responses import StreamingResponse
@@ -36,7 +37,7 @@ router = APIRouter(prefix="/logs", tags=["Logs & Export"])
 )
 def get_logs_history(
     db: Session = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    _current_user=Security(get_current_user, scopes=["logs:read"]),
 ) -> List[LogExportItemResponse]:
     """
     Retorna la lista de todas las exportaciones registradas en base de datos.
@@ -55,7 +56,7 @@ async def request_log_export(
     payload: LogExportRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    _current_user=Security(get_current_user, scopes=["logs:export"]),
 ) -> LogExportResponse:
     """
     Registra una solicitud de extracción de logs crudos en Base de Datos.
@@ -127,7 +128,7 @@ async def telegram_webhook(
 def download_log_export(
     export_id: str,
     db: Session = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    _current_user=Security(get_current_user, scopes=["logs:read"]),
 ):
     """
     Descarga por streaming el archivo JSONL para una exportación en estado 'Listo'.
@@ -177,7 +178,7 @@ def download_log_export(
 async def get_report_stats(
     export_id: str,
     db: Session = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    _current_user=Security(get_current_user, scopes=["logs:read"]),
 ) -> LogReportStatsResponse:
     """
     Retorna métricas agregadas por decoders de Wazuh para esquematizar el reporte técnico.

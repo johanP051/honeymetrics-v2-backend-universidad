@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query, Security, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_admin_user
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user_model import User
 from app.schemas.blacklist_schema import (
@@ -33,7 +33,7 @@ router = APIRouter(
     summary="Listar todas las IPs en la Blacklist (ordenadas por threat score)",
 )
 def list_blacklist(
-    _current_user: User = Depends(get_current_user),
+    _current_user: User = Security(get_current_user, scopes=["threats:read"]),
     db: Session = Depends(get_db),
 ) -> List[BlacklistEntryResponse]:
     """Retorna la lista completa de IPs registradas en el Threat Intelligence Center."""
@@ -68,26 +68,26 @@ def get_blacklist_vault(
     "/",
     response_model=BlacklistEntryResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Registrar nueva IP en la Blacklist [ADMIN]",
+    summary="Registrar nueva IP en la Blacklist [PBAC: threats:write]",
 )
 def create_blacklist_entry(
     payload: BlacklistEntryCreate,
-    current_admin: User = Depends(require_admin_user),
+    current_user: User = Security(get_current_user, scopes=["threats:write"]),
     db: Session = Depends(get_db),
 ) -> BlacklistEntryResponse:
     """Registra una nueva IP en la Blacklist aplicando invariantes y PoLP."""
-    return BlacklistService.create(payload, db, admin_user_id=current_admin.id)
+    return BlacklistService.create(payload, db, admin_user_id=current_user.id)
 
 
 @router.put(
     "/{entry_id}",
     response_model=BlacklistEntryResponse,
-    summary="Actualizar entrada de la Blacklist [ADMIN]",
+    summary="Actualizar entrada de la Blacklist [PBAC: threats:write]",
 )
 def update_blacklist_entry(
     entry_id: int,
     payload: BlacklistEntryUpdate,
-    _current_admin: User = Depends(require_admin_user),
+    _current_user: User = Security(get_current_user, scopes=["threats:write"]),
     db: Session = Depends(get_db),
 ) -> BlacklistEntryResponse:
     """Actualiza campos de una IP existente en la Blacklist."""
@@ -97,16 +97,16 @@ def update_blacklist_entry(
 @router.delete(
     "/{entry_id}",
     status_code=status.HTTP_200_OK,
-    summary="Eliminar IP de la Blacklist [ADMIN]",
+    summary="Eliminar IP de la Blacklist [PBAC: threats:delete]",
 )
 def delete_blacklist_entry(
     entry_id: int,
-    current_admin: User = Depends(require_admin_user),
+    current_user: User = Security(get_current_user, scopes=["threats:delete"]),
     db: Session = Depends(get_db),
 ) -> dict:
     """
     Elimina permanentemente una entrada de la Blacklist y la archiva en la Bóveda Forense.
-    Requiere rol Administrador.
+    Requiere scope 'threats:delete'.
     """
-    BlacklistService.delete(entry_id, db, deleted_by_user_id=current_admin.id)
+    BlacklistService.delete(entry_id, db, deleted_by_user_id=current_user.id)
     return {"message": f"Entrada ID {entry_id} eliminada de la Blacklist exitosamente."}
