@@ -148,7 +148,10 @@ def test_canonical_role_equivalences_and_anti_spoofing():
     assert "admin:all" in get_scopes_for_role("Administrador")
     assert "admin:all" in get_scopes_for_role("admin")
     assert "dashboard:read" in get_scopes_for_role("Directivo de T.I.")
-    assert "blacklist:read" in get_scopes_for_role("Analista de datos")
+    assert "blacklist:read" in get_scopes_for_role("Directivo de T.I.")
+    assert "threats:write" in get_scopes_for_role("Consultor de Ciberseguridad")
+    assert "logs:export" in get_scopes_for_role("Analista de datos")
+    assert "blacklist:read" not in get_scopes_for_role("Analista de datos")
     assert "admin:all" not in get_scopes_for_role("No-Admin")
     assert get_scopes_for_role("No-Admin") == []
 
