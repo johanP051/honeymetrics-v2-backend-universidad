@@ -48,3 +48,8 @@ ignore_missing_imports = true
 follow_imports = "silent"
 check_untyped_defs = false
 disallow_untyped_defs = false
+
+[tool.coverage.run]
+data_file = "/tmp/.coverage"
+source = ["app"]
+
