@@ -1,4 +1,4 @@
-name: Backend CI & Quality Gate
+name: Backend CI/CD Pipeline & Quality Gate
 
 on:
   push:
@@ -67,6 +67,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
 
       - name: 📦 Install Bandit
         run: pip install --no-cache-dir --only-binary :all: bandit==1.7.8
