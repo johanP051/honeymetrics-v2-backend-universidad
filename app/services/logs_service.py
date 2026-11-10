@@ -155,9 +155,7 @@ class LogsService:
         if not record:
             return None
 
-        start_str = (
-            record.start_date.strftime("%Y-%m-%d") if hasattr(record.start_date, "strftime") else str(record.start_date)
-        )
+        start_str = record.start_date.strftime("%Y-%m-%d") if hasattr(record.start_date, "strftime") else str(record.start_date)
         end_str = record.end_date.strftime("%Y-%m-%d") if hasattr(record.end_date, "strftime") else str(record.end_date)
 
         stats = await WazuhExtractor.get_decoders_stats(record.start_date, record.end_date)
