@@ -171,3 +171,45 @@ def test_admin_cannot_deactivate_own_account():
 
     assert exc_info.value.status_code == 400
     assert "propia cuenta" in exc_info.value.detail
+
+def test_admin_update_user_password_and_names():
+    from datetime import datetime, timezone
+    from sqlalchemy.orm import Session
+    from app.core.security import verify_password
+    from app.models.user_model import User
+    from app.schemas.admin_schema import UserUpdateAdminRequest
+    from app.services.admin_service import AdminService
+    db = MagicMock(spec=Session)
+    mock_user = MagicMock(spec=User)
+    mock_user.id = 2
+    mock_user.email = "usuario@ucundinamarca.edu.co"
+    mock_user.first_names = "Original"
+    mock_user.last_names = "User"
+    mock_user.role_id = 2
+    mock_user.is_active = True
+    mock_user.auth_version = 1
+    mock_user.role = MagicMock()
+    mock_user.role.name = "Analista"
+    mock_user.created_at = datetime.now(timezone.utc)
+
+    mock_admin = MagicMock(spec=User)
+    mock_admin.id = 1
+    mock_admin.email = "admin@ucundinamarca.edu.co"
+
+    db.query.return_value.filter.return_value.first.side_effect = [
+        mock_user,  # target user
+        mock_admin, # admin user for audit log
+    ]
+
+    payload = UserUpdateAdminRequest(
+        first_names="Actualizado",
+        last_names="Nuevo",
+        password="SuperPasswordSeguro123!",
+    )
+
+    res = AdminService.update_user(user_id=2, payload=payload, current_admin_id=1, db=db)
+    assert mock_user.first_names == "Actualizado"
+    assert mock_user.last_names == "Nuevo"
+    assert mock_user.must_change_password is True
+    assert mock_user.auth_version == 2
+    assert verify_password("SuperPasswordSeguro123!", mock_user.hashed_password)

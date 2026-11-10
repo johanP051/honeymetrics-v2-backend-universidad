@@ -1,6 +1,9 @@
 from datetime import date
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+# Límite máximo de rango de exportación (prevención DoS / overflow de fechas)
+MAX_EXPORT_RANGE_DAYS = 365
 
 
 class LogExportRequest(BaseModel):
@@ -9,10 +12,21 @@ class LogExportRequest(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    @model_validator(mode="after")
+    def validate_date_window(self) -> "LogExportRequest":
+        """Anti-DoS: rechaza rangos invertidos, fechas futuras y ventanas > 365 días."""
+        if self.start_date > self.end_date:
+            raise ValueError("La fecha de inicio debe ser anterior o igual a la fecha de fin.")
+        if self.end_date > date.today():
+            raise ValueError("No se puede exportar logs de fechas futuras (endDate no puede estar en el futuro).")
+        if (self.end_date - self.start_date).days >= MAX_EXPORT_RANGE_DAYS:
+            raise ValueError(f"El rango de exportación no puede exceder {MAX_EXPORT_RANGE_DAYS} días.")
+        return self
+
 
 class LogExportResponse(BaseModel):
     id: str = Field(..., description="Identificador correlativo de la exportación (ej. EXP-1045)")
-    status: Literal["Listo", "Procesando", "Pendiente de Aprobación", "Rechazada"] = Field(
+    status: Literal["Listo", "Procesando", "Pendiente de Aprobación", "Rechazada", "Expirado"] = Field(
         ..., description="Estado de la solicitud de exportación"
     )
     count: int = Field(..., description="Cantidad estimada o real de logs a procesar")
@@ -23,7 +37,7 @@ class LogExportItemResponse(BaseModel):
     id: str = Field(..., description="Identificador de la exportación (ej. EXP-1045)")
     date_range: str = Field(..., description="Rango de fechas legible")
     count: int = Field(..., description="Cantidad de registros")
-    status: Literal["Listo", "Procesando", "Pendiente de Aprobación", "Rechazada"] = Field(
+    status: Literal["Listo", "Procesando", "Pendiente de Aprobación", "Rechazada", "Expirado"] = Field(
         ..., description="Estado actual de la exportación"
     )
     created_at: str = Field(..., description="Fecha y hora de solicitud formateada para presentación")

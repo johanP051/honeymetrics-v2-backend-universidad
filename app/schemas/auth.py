@@ -1,14 +1,11 @@
-from typing import Literal
-
-from pydantic import BaseModel, ConfigDict, EmailStr
+from typing import List, Literal, Optional
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-
-# Literal es una caracteristica de pydantic que restringe los valores posibles a solo los especificados
 
 
 class UserResponse(BaseModel):
@@ -17,8 +14,10 @@ class UserResponse(BaseModel):
     first_names: str
     last_names: str
     role_id: int
+    role_name: Optional[str] = None
     is_active: bool
     must_change_password: bool
+    scopes: List[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -26,7 +25,71 @@ class UserResponse(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
-    user: UserResponse | None = None
+    user: Optional[UserResponse] = None
+    mfa_required: bool = False
+    must_change_password: bool = False
+    scopes: List[str] = []
 
 
-# Literal["bearer"] significa que el campo solo puede ser bearer; = "bearer" le asigna un valor por defecto si el cliente no envia token_type
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    qr: str
+
+
+class MfaVerifyRequest(BaseModel):
+    code: str = Field(..., min_length=6, max_length=6, description="Código TOTP de 6 dígitos")
+
+
+class MfaDisableRequest(BaseModel):
+    current_password: Optional[str] = Field(None, description="Contraseña actual requerida para reautenticación")
+    code: Optional[str] = Field(None, description="Código numérico TOTP opcional")
+
+
+class MfaVerifyResponse(BaseModel):
+    message: str = "Autenticación de dos factores activada exitosamente."
+    backup_codes: Optional[List[str]] = []
+    access_token: Optional[str] = None
+    token_type: Optional[str] = "bearer"
+
+
+class MfaDisableResponse(BaseModel):
+    message: str = "Autenticación de dos factores (2FA) desactivada exitosamente."
+    access_token: Optional[str] = None
+    token_type: Optional[str] = "bearer"
+
+
+class MfaVerifyLoginRequest(BaseModel):
+    mfa_token: str
+    code: Optional[str] = Field(
+        default=None,
+        description="Código TOTP (6 dígitos) o código de respaldo (XXXX-XXXX)",
+    )
+    totp_code: Optional[str] = Field(
+        default=None,
+        description="Alias de código TOTP compatible con frontend y versiones previas",
+    )
+
+    @model_validator(mode="after")
+    def validate_code_presence_and_format(self) -> "MfaVerifyLoginRequest":
+        effective_code = self.code or self.totp_code
+        if not effective_code:
+            raise ValueError("El código de verificación ('code' o 'totp_code') es obligatorio.")
+        clean = effective_code.strip()
+        if len(clean) not in (6, 8, 9):
+            raise ValueError("El código debe contener 6 dígitos (TOTP) o formato de respaldo (XXXX-XXXX).")
+        self.code = clean
+        return self
+
+
+class MfaTokenResponse(BaseModel):
+    mfa_required: bool = True
+    mfa_token: str
