@@ -14,11 +14,7 @@ from app.services.threat_service import ThreatService
 router = APIRouter(tags=["Threat Intelligence"])
 
 
-@router.get(
-    "/summary",
-    response_model=ThreatSummarySchema,
-    summary="Resumen global de CTI con filtrado temporal",
-)
+@router.get("/summary", response_model=ThreatSummarySchema, summary="Resumen global de CTI con filtrado temporal")
 async def get_threat_summary(
     range_preset: Optional[Literal["24h", "7d", "30d", "90d"]] = Query(None, description="Preset temporal: 24h, 7d, 30d, 90d"),
     range: Optional[Literal["24h", "7d", "30d", "90d"]] = Query(None, description="Alias para preset temporal (24h, 7d, 30d, 90d)"),
@@ -47,15 +43,10 @@ async def get_detected_botnets(_current_user=Depends(get_current_user)) -> List[
     return await ThreatService.get_detected_botnets()
 
 
-@router.get(
-    "/health",
-    response_model=HealthResponseSchema,
-    summary="Verificar estado del motor CTI",
-)
+@router.get("/health", response_model=HealthResponseSchema, summary="Verificar estado del motor CTI")
 async def health_check() -> HealthResponseSchema:
     """Retorna el estado de salud del servicio de Threat Intelligence."""
     from app.services.wazuh_extractor import WazuhExtractor
-
     is_online = await WazuhExtractor.check_connection()
     status_val = "healthy" if is_online else "degraded"
 
