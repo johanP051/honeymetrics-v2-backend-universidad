@@ -28,6 +28,8 @@ COPY --from=builder /install /usr/local
 COPY --chown=appuser:appuser alembic /app/alembic
 COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
 COPY --chown=appuser:appuser app /app/app
+COPY --chown=appuser:appuser pyproject.toml /app/pyproject.toml
+COPY --chown=appuser:appuser tests /app/tests
 
 USER appuser
 EXPOSE 8000
