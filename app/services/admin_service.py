@@ -167,7 +167,12 @@ class AdminService:
         db.commit()
 
     @staticmethod
-    def reset_user_mfa(user_id: int, current_admin_id: int, db: Session) -> dict:
+    def reset_user_mfa(
+        user_id: int,
+        current_admin_id: int,
+        db: Session,
+        base_origin: Optional[str] = None,
+    ) -> dict:
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"Usuario con ID {user_id} no encontrado.")
@@ -186,7 +191,7 @@ class AdminService:
         )
         user_email = user.email
         db.commit()
-        EmailService.send_mfa_reset_notification_email(email=user_email)
+        EmailService.send_mfa_reset_notification_email(email=user_email, base_origin=base_origin)
         return {"message": f"MFA para el usuario ID {user_id} reseteado exitosamente."}
 
     @staticmethod

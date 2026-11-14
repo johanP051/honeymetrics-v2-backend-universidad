@@ -3,10 +3,11 @@ Endpoints de Gestión de Perfil de Usuario.
 HoneyMetrics Backend v2.0 (UDEC)
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.request_origin import resolve_request_origin
 from app.db.session import get_db
 from app.models.user_model import User
 from app.schemas.auth import (
@@ -105,10 +106,11 @@ def verify_mfa_alias(
     summary="Desactivar 2FA del usuario en sesión (alias)",
 )
 def disable_mfa_alias(
+    request: Request,
     payload: Optional[MfaDisableRequest] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Desactiva 2FA, purga códigos de respaldo y emite access token renovado."""
-    return disable_mfa(db, current_user, payload)
+    return disable_mfa(db, current_user, payload, base_origin=resolve_request_origin(request))
 
