@@ -91,7 +91,12 @@ def verify_and_enable_mfa(db: Session, user: User, code: str) -> dict:
     }
 
 
-def disable_mfa(db: Session, user: User, payload: Optional[object] = None) -> dict:
+def disable_mfa(
+    db: Session,
+    user: User,
+    payload: Optional[object] = None,
+    base_origin: Optional[str] = None,
+) -> dict:
     """Desactiva 2FA, purga códigos de respaldo, incrementa auth_version y emite nuevo JWT."""
     if payload is not None and getattr(payload, "current_password", None):
         from app.core.security import verify_password
@@ -116,7 +121,7 @@ def disable_mfa(db: Session, user: User, payload: Optional[object] = None) -> di
     # Correo 3 (paridad con el backend guía): aviso al usuario de que su 2FA fue desactivado.
     # EmailService._dispatch_email nunca lanza excepciones hacia arriba: el flujo HTTP
     # NO se rompe si Resend falla (correo defensivo, PB-HM-06.1).
-    EmailService.send_mfa_reset_notification_email(email=user.email)
+    EmailService.send_mfa_reset_notification_email(email=user.email, base_origin=base_origin)
 
     role_name = user.role.name if getattr(user, "role", None) else None
     user_scopes = get_scopes_for_role(role_name)

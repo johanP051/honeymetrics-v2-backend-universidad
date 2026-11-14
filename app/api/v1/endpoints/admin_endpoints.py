@@ -3,10 +3,11 @@ Endpoints del Panel de Administración — Gestión de Usuarios y Auditoría.
 Todos los endpoints requieren rol Administrador.
 """
 from typing import List, Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin_user
+from app.core.request_origin import resolve_request_origin
 from app.db.session import get_db
 from app.models.user_model import User
 from app.schemas.admin_schema import (
@@ -73,6 +74,7 @@ def list_users(
     summary="Crear nuevo usuario con contraseña temporal [ADMIN] (alias /users)",
 )
 def create_user(
+    request: Request,
     payload: UserCreateAdminRequest,
     background_tasks: BackgroundTasks,
     current_admin: User = Depends(require_admin_user),
@@ -85,6 +87,7 @@ def create_user(
             EmailService.send_welcome_email,
             email=str(payload.email),
             temp_password=payload.temp_password,
+            base_origin=resolve_request_origin(request),
         )
     return created_user
 
@@ -139,11 +142,17 @@ def delete_user(
 )
 def reset_user_mfa(
     user_id: int,
+    request: Request,
     current_admin: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> dict:
     """Resetea MFA y códigos de respaldo para contingencia administrativa."""
-    return AdminService.reset_user_mfa(user_id, current_admin_id=current_admin.id, db=db)
+    return AdminService.reset_user_mfa(
+        user_id,
+        current_admin_id=current_admin.id,
+        db=db,
+        base_origin=resolve_request_origin(request),
+    )
 
 
 @router.get(
