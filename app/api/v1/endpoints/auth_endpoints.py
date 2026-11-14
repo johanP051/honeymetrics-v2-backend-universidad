@@ -3,16 +3,15 @@ Controlador de Autenticación, 2FA MFA TOTP, Sesión y Recuperación de Contrase
 HoneyMetrics Backend v2.0 (Cátedra de Ingeniería de Software - UDEC)
 """
 from typing import Optional
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.api.deps import bearer_scheme, get_current_user
-from app.core.config import settings
 from app.core.permissions import get_scopes_for_role
 from app.core.rate_limit import limiter
+from app.core.request_origin import resolve_request_origin
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.models.user_model import User
@@ -108,12 +107,13 @@ def mfa_verify(
 
 @router.post("/mfa/disable", response_model=MfaDisableResponse, status_code=status.HTTP_200_OK)
 def mfa_disable(
+    request: Request,
     payload: Optional[MfaDisableRequest] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Desactiva 2FA, purga códigos de respaldo y emite access token renovado."""
-    return disable_mfa(db, current_user, payload)
+    return disable_mfa(db, current_user, payload, base_origin=resolve_request_origin(request))
 
 
 def _verify_login_core(payload: MfaVerifyLoginRequest, db: Session) -> TokenResponse:
@@ -174,21 +174,6 @@ def logout(
     if token:
         revoke_token(db, token)
     return {"message": "Sesión cerrada exitosamente."}
-
-
-def resolve_request_origin(request: Request) -> str:
-    """Extrae el origen dinámico de la petición (Origin o Referer) con fallback a settings.FRONTEND_URL."""
-    origin = request.headers.get("origin")
-    if origin and origin.strip() and origin.strip().lower() != "null":
-        return origin.strip().rstrip("/")
-
-    referer = request.headers.get("referer")
-    if referer and referer.strip():
-        parsed = urlparse(referer.strip())
-        if parsed.scheme and parsed.netloc:
-            return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
-
-    return settings.FRONTEND_URL.rstrip("/")
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)

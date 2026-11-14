@@ -235,3 +235,29 @@ def test_email_mfa_reset_notification():
             assert "HoneyMetrics_logo_circled" in html
             assert "Restablecimiento de 2FA" in html
             assert "no respondas a este mensaje" in html
+
+
+def test_email_welcome_and_mfa_reset_respect_base_origin():
+    """Verifica que welcome y mfa_reset usen base_origin dinámico cuando se provee."""
+    custom_origin = "https://honey-v2.johan-d3v.site/"
+    with patch("app.core.config.settings.RESEND_API_KEY", "re_test_origin_key"):
+        with patch("resend.Emails.send") as mock_send:
+            mock_send.return_value = {"id": "origin_test_1"}
+
+            ok_welcome = EmailService.send_welcome_email(
+                email="nuevo@ucundinamarca.edu.co",
+                temp_password="TmpPassword123!",
+                base_origin=custom_origin,
+            )
+            assert ok_welcome is True
+            welcome_html = mock_send.call_args_list[0][0][0]["html"]
+            assert 'href="https://honey-v2.johan-d3v.site/login"' in welcome_html
+
+            ok_mfa = EmailService.send_mfa_reset_notification_email(
+                email="nuevo@ucundinamarca.edu.co",
+                base_origin=custom_origin,
+            )
+            assert ok_mfa is True
+            mfa_html = mock_send.call_args_list[1][0][0]["html"]
+            assert 'href="https://honey-v2.johan-d3v.site/login"' in mfa_html
+

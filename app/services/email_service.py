@@ -68,6 +68,12 @@ def _dispatch_email(to_email: str, subject: str, html_content: str, log_tag: str
         return False
 
 
+def _build_frontend_url(path: str, base_origin: Optional[str] = None) -> str:
+    """Construye una URL absoluta hacia el frontend priorizando base_origin sobre settings.FRONTEND_URL."""
+    base = (base_origin or settings.FRONTEND_URL).rstrip("/")
+    return f"{base}/{path.lstrip('/')}"
+
+
 class EmailService:
     @staticmethod
     def send_password_reset_email(
@@ -78,8 +84,7 @@ class EmailService:
     ) -> bool:
         """Envía enlace de recuperación válido 1h. Retorna True siempre salvo error Resend."""
         if not reset_url:
-            base = (base_origin or settings.FRONTEND_URL).rstrip("/")
-            reset_url = f"{base}/reset-password?token={token}"
+            reset_url = _build_frontend_url(f"reset-password?token={token}", base_origin)
         html_content = get_password_reset_html(reset_url)
         return _dispatch_email(
             to_email=email,
@@ -89,9 +94,14 @@ class EmailService:
         )
 
     @staticmethod
-    def send_welcome_email(email: str, temp_password: str, role_name: str = "Usuario") -> bool:
+    def send_welcome_email(
+        email: str,
+        temp_password: str,
+        role_name: str = "Usuario",
+        base_origin: Optional[str] = None,
+    ) -> bool:
         """Envía credenciales temporales de bienvenida con enlace al login institucional."""
-        login_url = f"{settings.FRONTEND_URL.rstrip('/')}/login"
+        login_url = _build_frontend_url("login", base_origin)
         html_content = get_welcome_email_html(
             email=email,
             temp_password=temp_password,
@@ -106,18 +116,27 @@ class EmailService:
         )
 
     @staticmethod
-    def send_user_welcome_email(email: str, temporary_password: str, role_name: str = "Usuario") -> bool:
+    def send_user_welcome_email(
+        email: str,
+        temporary_password: str,
+        role_name: str = "Usuario",
+        base_origin: Optional[str] = None,
+    ) -> bool:
         """Alias para compatibilidad con firmas del backend guía."""
         return EmailService.send_welcome_email(
             email=email,
             temp_password=temporary_password,
             role_name=role_name,
+            base_origin=base_origin,
         )
 
     @staticmethod
-    def send_mfa_reset_notification_email(email: str) -> bool:
+    def send_mfa_reset_notification_email(
+        email: str,
+        base_origin: Optional[str] = None,
+    ) -> bool:
         """Notifica al usuario que su 2FA fue reseteado por un administrador institucional."""
-        login_url = f"{settings.FRONTEND_URL.rstrip('/')}/login"
+        login_url = _build_frontend_url("login", base_origin)
         html_content = get_mfa_reset_html(email=email, login_url=login_url)
         return _dispatch_email(
             to_email=email,
