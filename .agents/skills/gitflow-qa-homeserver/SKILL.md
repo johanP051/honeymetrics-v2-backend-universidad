@@ -40,29 +40,30 @@ Si durante la fase de auditoría en QA se detecta un bug y se aplica un parche:
 
 ---
 
-## 🏗️ Protocolo de Despliegue y Pruebas en el Home Server (192.168.31.235)
+## 🏗️ Protocolo de Despliegue y Pruebas en el Nodo 2 (`192.168.33.2`)
 
-Una vez que el código esté promovido legalmente en la rama `QA`, el agente debe seguir este checklist de despliegue antes de declarar cualquier prueba como válida:
+Una vez que el código esté promovido legalmente (`develop` → `QA` → `main` según corresponda), el agente debe desplegar en el **Nodo 2 (`sebas@192.168.33.2`)** —NO en `.235`— y verificar `~/INFRA.md` si hay dudas:
 
 ### Paso 1: Actualización del Repositorio en el Servidor
 ```bash
-ssh -p 22 jsebas@192.168.31.235 'cd /home/jsebas/honeymetrics-v2-backend-universidad && git pull origin QA'
+ssh sebas@192.168.33.2 'cd ~/honeymetrics-v2-backend-universidad && git pull origin main'
 ```
+*(Conservar los ajustes locales del Nodo 2 en `docker-compose.yml` y `docker-compose.prod.yml` si aplican).*
 
-### Paso 2: Recreación Obligatoria de Contenedores (`--force-recreate`)
+### Paso 2: Build y Recreación Obligatoria de Contenedores (`--force-recreate`)
 > `docker restart` NO recarga cambios en el archivo `.env`. Si se modifican variables (ej. `RESEND_API_KEY`, `FRONTEND_URL`), el contenedor DEBE ser recreado:
 ```bash
-ssh -p 22 jsebas@192.168.31.235 'cd /home/jsebas/honeymetrics-v2-backend-universidad && docker compose up -d --no-deps --force-recreate api'
+ssh sebas@192.168.33.2 'cd ~/honeymetrics-v2-backend-universidad && docker build --network=host -t honeymetrics-v2-backend-universidad-api:latest . && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps --force-recreate api'
 ```
 
 ### Paso 3: Aplicación de Migraciones de Base de Datos
 Si la actualización incluyó cambios de modelos o esquemas:
 ```bash
-ssh -p 22 jsebas@192.168.31.235 'docker exec hm_v2_api alembic upgrade head'
+ssh sebas@192.168.33.2 'docker exec hm_v2_api alembic upgrade head'
 ```
 
 ### Paso 4: Verificación de Observabilidad y Recibos (RDD)
 Antes de invitar al usuario a probar o certificar el endpoint:
-1. Inspeccionar logs limpios: `docker logs --tail 30 hm_v2_api`.
-2. Verificar túnel Cloudflare enrutado: `curl -I https://api-honey-v2-homeserver.johan-d3v.site/docs`.
-3. Confirmar que las variables de entorno están vivas dentro del contenedor: `docker exec hm_v2_api env | grep <VARIABLE>`.
+1. Inspeccionar logs limpios: `ssh sebas@192.168.33.2 'docker logs --tail 30 hm_v2_api'`.
+2. Verificar túnel Cloudflare enrutado (`hm_v2_api_cloudflared` en Nodo 2): `curl -s https://api-honey-v2-homeserver.johan-d3v.site/api/v1/health`.
+3. Confirmar que las variables de entorno están vivas dentro del contenedor: `ssh sebas@192.168.33.2 'docker exec hm_v2_api env | grep <VARIABLE>'`.
