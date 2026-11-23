@@ -142,3 +142,30 @@ def test_get_report_stats_success():
         app.dependency_overrides.pop(get_db, None)
 
 
+@pytest.mark.anyio
+async def test_wazuh_offline_uses_real_local_datasets_for_any_date():
+    """Verifica que en contingencia offline se cuenten y agreguen eventos REALES locales para cualquier fecha."""
+    from app.services.wazuh_stats import WazuhStatsService
+    from app.services.wazuh_extractor import WazuhExtractor
+
+    WazuhExtractor.mark_offline()
+    try:
+        # Rango de fecha fuera del snapshot histórico (ej. noviembre 2026) debe retornar > 0 líneas reales
+        count_nov = await WazuhStatsService.count_events_for_range(date(2026, 11, 10), date(2026, 11, 12))
+        assert count_nov > 0
+
+        # Rango de 10 días debe producir un conteo >= rango de 1 día
+        count_1d = await WazuhStatsService.count_events_for_range(date(2026, 11, 10), date(2026, 11, 10))
+        count_10d = await WazuhStatsService.count_events_for_range(date(2026, 11, 1), date(2026, 11, 10))
+        assert count_10d >= count_1d > 0
+
+        # Decoders reales agregados desde el JSONL local
+        stats = await WazuhStatsService.get_decoders_stats(date(2026, 11, 10), date(2026, 11, 12))
+        assert len(stats["labels"]) > 0
+        assert len(stats["values"]) == len(stats["labels"])
+        assert stats["total"] > 0
+    finally:
+        WazuhExtractor.mark_online()
+
+
+
