@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+import time
 from typing import Dict, Any, List, Optional
 import httpx
 
@@ -36,6 +37,21 @@ class WazuhExtractor:
     count_events_for_preset = WazuhStatsService.count_events_for_preset
     get_decoders_stats = WazuhStatsService.get_decoders_stats
 
+    _OFFLINE_COOLDOWN_SECONDS = 30.0
+    _offline_until: float = 0.0
+
+    @classmethod
+    def is_recently_offline(cls) -> bool:
+        return time.monotonic() < cls._offline_until
+
+    @classmethod
+    def mark_offline(cls) -> None:
+        cls._offline_until = time.monotonic() + cls._OFFLINE_COOLDOWN_SECONDS
+
+    @classmethod
+    def mark_online(cls) -> None:
+        cls._offline_until = 0.0
+
     @classmethod
     def is_configured(cls) -> bool:
         """Verifica si las credenciales mínimas de Wazuh están configuradas."""
@@ -43,17 +59,24 @@ class WazuhExtractor:
 
     @classmethod
     async def check_connection(cls) -> bool:
-        """Realiza un health check profundo a Wazuh."""
+        """Realiza un health check profundo a Wazuh con circuit-breaker breve para contingencia."""
         if not cls.is_configured():
+            return False
+        if cls.is_recently_offline():
             return False
         url = f"{settings.WAZUH_INDEXER_URL}/_cluster/health"
         auth = (settings.WAZUH_INDEXER_USER, settings.WAZUH_INDEXER_PASSWORD)
         try:
-            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=5.0) as client:
+            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=3.0) as client:
                 response = await client.get(url, auth=auth)
-                return response.status_code == 200
+                if response.status_code == 200:
+                    cls.mark_online()
+                    return True
+                cls.mark_offline()
+                return False
         except Exception as e:
-            logger.warning("Wazuh health check failed: %s", str(e))
+            cls.mark_offline()
+            logger.warning("Wazuh health check failed: %r", e)
             return False
 
     @classmethod

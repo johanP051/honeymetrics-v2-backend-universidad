@@ -53,7 +53,7 @@ class ThreatSummaryService:
         filtered_attackers, filtered_botnets = all_attackers, all_botnets
 
         if start_date or end_date:
-            min_valid, max_valid = date(2026, 4, 1), date(2026, 8, 31)
+            min_valid, max_valid = date(2026, 4, 1), max(date(2026, 8, 31), today)
             s_date, e_date = start_date or min_valid, end_date or max_valid
             if s_date > max_valid or e_date < min_valid:
                 return ThreatSummarySchema(
@@ -61,8 +61,9 @@ class ThreatSummaryService:
                     active_critical_cves_count=0, peak_hour_utc="N/A", top_attackers=[],
                     detected_botnets=[], generated_at=datetime.now(timezone.utc),
                 )
+            span_days = max(1, (max_valid - min_valid).days + 1)
             days = max(1, (min(e_date, max_valid) - max(s_date, min_valid)).days + 1)
-            ratio = min(1.0, days / 153)
+            ratio = min(1.0, days / span_days)
             total_events = int(165247 * ratio)
             unique_ips = max(1, int(1107 * (ratio**0.5)))
             persistent_threats = max(1, int(9 * ratio)) if ratio > 0.3 else min(9, int(9 * ratio) + 1)
