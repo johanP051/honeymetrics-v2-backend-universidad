@@ -124,7 +124,9 @@ class WazuhScrollService:
         chunk_size: int = 5000,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Generador asíncrono para streaming de logs con Scroll API."""
-        if not cls._is_configured():
+        from app.services.wazuh_extractor import WazuhExtractor
+
+        if not cls._is_configured() or WazuhExtractor.is_recently_offline():
             return
 
         start_iso = f"{start_date}T00:00:00.000Z"
@@ -144,11 +146,12 @@ class WazuhScrollService:
 
         scroll_id = None
         try:
-            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=30.0) as client:
+            async with httpx.AsyncClient(verify=settings.WAZUH_TLS_VERIFY, timeout=10.0) as client:
                 resp = await client.post(search_url, auth=auth, json=query)
                 if resp.status_code != 200:
                     return
 
+                WazuhExtractor.mark_online()
                 data = resp.json()
                 scroll_id = data.get("_scroll_id")
                 hits = data.get("hits", {}).get("hits", [])
@@ -168,7 +171,8 @@ class WazuhScrollService:
                     scroll_id = scroll_data.get("_scroll_id")
                     hits = scroll_data.get("hits", {}).get("hits", [])
         except Exception as e:
-            logger.error("Error en extract_logs_scroll: %s", str(e))
+            WazuhExtractor.mark_offline()
+            logger.error("Error en extract_logs_scroll: %r", e)
         finally:
             if scroll_id:
                 try:

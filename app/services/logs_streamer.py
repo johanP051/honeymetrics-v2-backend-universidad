@@ -18,6 +18,8 @@ class LogsStreamer:
     """Submódulo de streaming multinivel resiliente para datasets JSONL de telemetría."""
 
     LOCAL_STORAGE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/downloads"))
+    # Repositorio local de datasets REALES de Wazuh montados en el contenedor (/app/datasets_wazuh)
+    DATASETS_WAZUH_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../datasets_wazuh"))
     # Salvaguarda de líneas REALES de Wazuh empaquetadas con la imagen / repositorio.
     # Garantiza que las descargas JAMÁS entreguen un .jsonl vacío cuando el Indexer
     # no responde y las rutas del host no existen dentro del contenedor.
@@ -26,9 +28,24 @@ class LogsStreamer:
     )
 
     @classmethod
+    def get_export_file_path(cls, export_id: str, start_date: date, end_date: date) -> str:
+        return os.path.join(cls.LOCAL_STORAGE_DIR, f"logs_{start_date}_{end_date}_{export_id}.jsonl")
+
+    @classmethod
     def get_candidate_paths(cls) -> List[str]:
-        # Rutas configuradas + salvaguarda real de último recurso (sin duplicados)
+        # Rutas configuradas + datasets reales en /app/datasets_wazuh (ordenados por tamaño) + salvaguarda
         paths = list(settings.DATASET_PATHS)
+        if os.path.isdir(cls.DATASETS_WAZUH_DIR):
+            discovered = []
+            for entry in os.listdir(cls.DATASETS_WAZUH_DIR):
+                if entry.endswith(".jsonl"):
+                    full_path = os.path.join(cls.DATASETS_WAZUH_DIR, entry)
+                    if os.path.isfile(full_path) and os.path.getsize(full_path) > 0:
+                        discovered.append(full_path)
+            discovered.sort(key=lambda p: os.path.getsize(p), reverse=True)
+            for p in discovered:
+                if p not in paths:
+                    paths.append(p)
         if cls.REAL_SAMPLE_DATASET not in paths:
             paths.append(cls.REAL_SAMPLE_DATASET)
         return paths
@@ -54,10 +71,15 @@ class LogsStreamer:
         el registro. Permite al endpoint responder 503 ANTES de iniciar el stream
         en lugar de entregar un .jsonl de 0 bytes.
         """
+        record_id = getattr(record, "id", None)
+        if record_id:
+            export_file = cls.get_export_file_path(record_id, record.start_date, record.end_date)
+            if os.path.isfile(export_file) and os.path.getsize(export_file) > 0:
+                return True
         if cls.get_partitioned_files_for_range(record.start_date, record.end_date):
             return True
         for candidate in cls.get_candidate_paths():
-            if os.path.isfile(candidate):
+            if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
                 return True
         # Último recurso: consulta en vivo al Indexer
         return bool(settings.WAZUH_INDEXER_URL and settings.WAZUH_INDEXER_USER)
@@ -68,15 +90,23 @@ class LogsStreamer:
         if not record or record.status != "Listo":
             return
 
-        target_count = record.count
+        target_count = record.count if (record.count and record.count > 0) else 1000
         yielded_count = 0
 
-        # Nivel 1: Archivos particionados diarios (data/downloads) y datasets reales
-        # configurados (montados :ro en /app/datasets_wazuh) + salvaguarda real empaquetada
-        partitioned_files = cls.get_partitioned_files_for_range(record.start_date, record.end_date)
-        candidate_files = [p for p in cls.get_candidate_paths() if os.path.isfile(p)]
+        # Nivel 1: Archivo exacto generado por la tarea, archivos particionados diarios
+        # y datasets reales en /app/datasets_wazuh + salvaguarda real empaquetada
+        export_file = cls.get_export_file_path(record.id, record.start_date, record.end_date)
+        exact_files = [export_file] if (os.path.isfile(export_file) and os.path.getsize(export_file) > 0) else []
+        partitioned_files = [
+            p for p in cls.get_partitioned_files_for_range(record.start_date, record.end_date)
+            if os.path.getsize(p) > 0
+        ]
+        candidate_files = [
+            p for p in cls.get_candidate_paths()
+            if os.path.isfile(p) and os.path.getsize(p) > 0
+        ]
         source_files: List[str] = []
-        for path in partitioned_files + candidate_files:
+        for path in exact_files + partitioned_files + candidate_files:
             if path not in source_files:
                 source_files.append(path)
 
